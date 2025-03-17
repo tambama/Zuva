@@ -15,8 +15,6 @@ namespace cAlgo
         [Parameter("Higher Timeframe", DefaultValue = "H4")]
         public string HigherTimeframeStr { get; set; }
         
-        private TimeFrame _higherTimeframe;
-
         [Parameter("Show Current Timeframe Swings", DefaultValue = true)]
         public bool ShowCurrentTimeframeSwings { get; set; }
 
@@ -32,62 +30,34 @@ namespace cAlgo
         [Output("Higher TF Swing Low", Color = Colors.Crimson, PlotType = PlotType.Points, Thickness = 6)]
         public IndicatorDataSeries HigherTFSwingLows { get; set; }
 
-        private Bars _currentTimeframeBars;
-        private Bars _higherTimeframeBars;
-
-
-        // Current timeframe swing tracking
-        private int _lastSwingHighIndex = -1;
-        private int _lastSwingLowIndex = -1;
-        private double _lastSwingHighValue = double.MinValue;
-        private double _lastSwingLowValue = double.MaxValue;
-        private bool _lastSwingWasHigh = false;
-        private bool _lastSwingWasLow = false;
-
-        // Higher timeframe swing tracking
-        private int _lastHigherTFSwingHighIndex = -1;
-        private int _lastHigherTFSwingLowIndex = -1;
-        private double _lastHigherTFSwingHighValue = double.MinValue;
-        private double _lastHigherTFSwingLowValue = double.MaxValue;
-        private bool _lastHigherTFSwingWasHigh = false;
-        private bool _lastHigherTFSwingWasLow = false;
-        private readonly Dictionary<long, int> _higherTFBarOpenTimes = new Dictionary<long, int>();
+        private TimeFrame _higherTimeframe;
+        private SwingPointDetector _currentTFDetector;
+        private SwingPointDetector _higherTFDetector;
+        private HigherTimeframeMapper _timeframeMapper;
 
         protected override void Initialize()
         {
-            _currentTimeframeBars = Bars;
+            // Initialize current timeframe swing detector
+            _currentTFDetector = new SwingPointDetector(Bars);
 
             if (UseHigherTimeframe)
             {
                 // Convert the string parameter to a TimeFrame
-                _higherTimeframe = GetTimeFrameFromString(HigherTimeframeStr);
+                _higherTimeframe = TimeFrameHelper.GetTimeFrameFromString(HigherTimeframeStr);
                 
-                // Use the higher timeframe selected by the user
-                _higherTimeframeBars = MarketData.GetBars(_higherTimeframe);
+                // Get higher timeframe bars
+                Bars higherTFBars = MarketData.GetBars(_higherTimeframe);
                 
-                // Map higher timeframe bars to current timeframe bars for drawing
-                MapHigherTimeframeBars();
+                // Initialize higher timeframe swing detector
+                _higherTFDetector = new SwingPointDetector(higherTFBars);
+                
+                // Create mapper between timeframes
+                _timeframeMapper = new HigherTimeframeMapper(Bars, higherTFBars);
             }
         }
 
-        private void MapHigherTimeframeBars()
-        {
-            // Create a mapping between higher timeframe bar open times and current timeframe indices
-            for (int i = 0; i < _higherTimeframeBars.Count; i++)
-            {
-                DateTime higherTFOpenTime = _higherTimeframeBars.OpenTimes[i];
-                long openTimeTicks = higherTFOpenTime.Ticks;
-                
-                for (int j = 0; j < Bars.Count; j++)
-                {
-                    if (Bars.OpenTimes[j] >= higherTFOpenTime)
-                    {
-                        _higherTFBarOpenTimes[openTimeTicks] = j;
-                        break;
-                    }
-                }
-            }
-        }
+        private List<SwingPointHistory> _higherTFSwingHighHistory = new List<SwingPointHistory>();
+        private List<SwingPointHistory> _higherTFSwingLowHistory = new List<SwingPointHistory>();
 
         public override void Calculate(int index)
         {
@@ -98,493 +68,107 @@ namespace cAlgo
             // Calculate current timeframe swing points
             if (ShowCurrentTimeframeSwings)
             {
-                CalculateCurrentTimeframeSwings(index);
+                SwingPoint swingPoint = _currentTFDetector.DetectSwingPoint(index);
+                
+                if (swingPoint.HasSwingHigh)
+                {
+                    CurrentTFSwingHighs[index] = swingPoint.SwingHighValue;
+                }
+                
+                if (swingPoint.HasSwingLow)
+                {
+                    CurrentTFSwingLows[index] = swingPoint.SwingLowValue;
+                }
+                
+                // Clear previous swing points if needed
+                if (swingPoint.ClearPreviousHigh && swingPoint.PreviousSwingHighIndex >= 0)
+                {
+                    CurrentTFSwingHighs[swingPoint.PreviousSwingHighIndex] = double.NaN;
+                }
+                
+                if (swingPoint.ClearPreviousLow && swingPoint.PreviousSwingLowIndex >= 0)
+                {
+                    CurrentTFSwingLows[swingPoint.PreviousSwingLowIndex] = double.NaN;
+                }
             }
 
             // Calculate higher timeframe swing points if enabled
-            if (UseHigherTimeframe && _higherTimeframeBars != null)
+            if (UseHigherTimeframe && _higherTFDetector != null && _timeframeMapper != null)
             {
-                CalculateHigherTimeframeSwings(index);
-            }
-        }
-
-        private void CalculateCurrentTimeframeSwings(int index)
-        {
-            // Current candle properties
-            double currentHigh = Bars.HighPrices[index];
-            double currentLow = Bars.LowPrices[index];
-            double currentOpen = Bars.OpenPrices[index];
-            double currentClose = Bars.ClosePrices[index];
-            bool isDownCandle = currentClose < currentOpen;
-            bool isUpCandle = currentClose > currentOpen;
-
-            // Handle the special case where previous candle has a swing low
-            if (_lastSwingWasLow && _lastSwingLowIndex >= 0)
-            {
-                double prevSwingLowValue = Bars.LowPrices[_lastSwingLowIndex];
-                double prevSwingLowCandleHigh = Bars.HighPrices[_lastSwingLowIndex];
-
-                if (currentLow < prevSwingLowValue && currentHigh > prevSwingLowCandleHigh)
-                {
-                    if (isDownCandle)
-                    {
-                        // Set current high as swing high first
-                        CurrentTFSwingHighs[index] = currentHigh;
-                        _lastSwingHighIndex = index;
-                        _lastSwingHighValue = currentHigh;
-                        _lastSwingWasHigh = true;
-                        _lastSwingWasLow = false;
-
-                        // Then set current low as swing low
-                        CurrentTFSwingLows[index] = currentLow;
-                        _lastSwingLowIndex = index;
-                        _lastSwingLowValue = currentLow;
-                        _lastSwingWasLow = true;
-                        _lastSwingWasHigh = false;
-                        
-                        return; // Finished processing this candle
-                    }
-                    else if (isUpCandle)
-                    {
-                        // Move the swing low to current candle
-                        CurrentTFSwingLows[_lastSwingLowIndex] = double.NaN;
-                        CurrentTFSwingLows[index] = currentLow;
-                        _lastSwingLowIndex = index;
-                        _lastSwingLowValue = currentLow;
-
-                        // Then set current high as swing high
-                        CurrentTFSwingHighs[index] = currentHigh;
-                        _lastSwingHighIndex = index;
-                        _lastSwingHighValue = currentHigh;
-                        _lastSwingWasHigh = true;
-                        _lastSwingWasLow = false;
-                        
-                        return; // Finished processing this candle
-                    }
-                }
-            }
-
-            // Handle the special case where previous candle has a swing high
-            if (_lastSwingWasHigh && _lastSwingHighIndex >= 0)
-            {
-                double prevSwingHighValue = Bars.HighPrices[_lastSwingHighIndex];
-                double prevSwingHighCandleLow = Bars.LowPrices[_lastSwingHighIndex];
-
-                if (currentHigh > prevSwingHighValue && currentLow < prevSwingHighCandleLow)
-                {
-                    if (isUpCandle)
-                    {
-                        // Set current low as swing low first
-                        CurrentTFSwingLows[index] = currentLow;
-                        _lastSwingLowIndex = index;
-                        _lastSwingLowValue = currentLow;
-                        _lastSwingWasLow = true;
-                        _lastSwingWasHigh = false;
-
-                        // Then set current high as swing high
-                        CurrentTFSwingHighs[index] = currentHigh;
-                        _lastSwingHighIndex = index;
-                        _lastSwingHighValue = currentHigh;
-                        _lastSwingWasHigh = true;
-                        _lastSwingWasLow = false;
-                        
-                        return; // Finished processing this candle
-                    }
-                    else if (isDownCandle)
-                    {
-                        // Move the swing high to current candle
-                        CurrentTFSwingHighs[_lastSwingHighIndex] = double.NaN;
-                        CurrentTFSwingHighs[index] = currentHigh;
-                        _lastSwingHighIndex = index;
-                        _lastSwingHighValue = currentHigh;
-
-                        // Then set current low as swing low
-                        CurrentTFSwingLows[index] = currentLow;
-                        _lastSwingLowIndex = index;
-                        _lastSwingLowValue = currentLow;
-                        _lastSwingWasLow = true;
-                        _lastSwingWasHigh = false;
-                        
-                        return; // Finished processing this candle
-                    }
-                }
-            }
-
-            // Normal swing high detection logic
-            if (_lastSwingWasLow || (!_lastSwingWasHigh && !_lastSwingWasLow))
-            {
-                // If last swing was a low or no swing yet
-                if (currentHigh > _lastSwingHighValue)
-                {
-                    // New swing high
-                    CurrentTFSwingHighs[index] = currentHigh;
-                    _lastSwingHighIndex = index;
-                    _lastSwingHighValue = currentHigh;
-                    _lastSwingWasHigh = true;
-                    _lastSwingWasLow = false;
-                    return; // Finished processing this candle
-                }
-            }
-            else if (_lastSwingWasHigh && _lastSwingHighIndex >= 0)
-            {
-                // If last swing was a high
-                if (currentHigh > _lastSwingHighValue)
-                {
-                    // Move swing high to current candle
-                    CurrentTFSwingHighs[_lastSwingHighIndex] = double.NaN;
-                    CurrentTFSwingHighs[index] = currentHigh;
-                    _lastSwingHighIndex = index;
-                    _lastSwingHighValue = currentHigh;
-                    return; // Finished processing this candle
-                }
+                int higherTFIndex = _timeframeMapper.GetHigherTimeframeIndex(index);
                 
-                // Check if we should create a new swing low
-                if (currentLow < Bars.LowPrices[_lastSwingHighIndex])
+                if (higherTFIndex >= 0)
                 {
-                    // New swing low after a swing high
-                    CurrentTFSwingLows[index] = currentLow;
-                    _lastSwingLowIndex = index;
-                    _lastSwingLowValue = currentLow;
-                    _lastSwingWasLow = true;
-                    _lastSwingWasHigh = false;
-                    return; // Finished processing this candle
-                }
-            }
-
-            // Normal swing low detection logic
-            if (_lastSwingWasHigh || (!_lastSwingWasHigh && !_lastSwingWasLow))
-            {
-                // If last swing was a high or no swing yet
-                if (currentLow < _lastSwingLowValue)
-                {
-                    // New swing low
-                    CurrentTFSwingLows[index] = currentLow;
-                    _lastSwingLowIndex = index;
-                    _lastSwingLowValue = currentLow;
-                    _lastSwingWasLow = true;
-                    _lastSwingWasHigh = false;
-                    return; // Finished processing this candle
-                }
-            }
-            else if (_lastSwingWasLow && _lastSwingLowIndex >= 0)
-            {
-                // If last swing was a low
-                if (currentLow < _lastSwingLowValue)
-                {
-                    // Move swing low to current candle
-                    CurrentTFSwingLows[_lastSwingLowIndex] = double.NaN;
-                    CurrentTFSwingLows[index] = currentLow;
-                    _lastSwingLowIndex = index;
-                    _lastSwingLowValue = currentLow;
-                    return; // Finished processing this candle
-                }
-                
-                // Check if we should create a new swing high
-                if (currentHigh > Bars.HighPrices[_lastSwingLowIndex])
-                {
-                    // New swing high after a swing low
-                    CurrentTFSwingHighs[index] = currentHigh;
-                    _lastSwingHighIndex = index;
-                    _lastSwingHighValue = currentHigh;
-                    _lastSwingWasHigh = true;
-                    _lastSwingWasLow = false;
-                    return; // Finished processing this candle
-                }
-            }
-        }
-        
-        private void CalculateHigherTimeframeSwings(int index)
-        {
-            // Find the corresponding higher timeframe bar for this current timeframe bar
-            DateTime currentBarOpenTime = Bars.OpenTimes[index];
-            int higherTFIndex = -1;
-            
-            // Declare the variable outside of the loop
-            DateTime nextHigherTFOpenTime;
-            
-            // Find the higher timeframe bar that contains this bar
-            for (int i = _higherTimeframeBars.Count - 1; i >= 0; i--)
-            {
-                DateTime higherTFOpenTime = _higherTimeframeBars.OpenTimes[i];
-                nextHigherTFOpenTime = (i < _higherTimeframeBars.Count - 1) ? 
-                    _higherTimeframeBars.OpenTimes[i + 1] : DateTime.MaxValue;
+                    // Process the higher timeframe swing detection
+                    SwingPoint htfSwingPoint = _higherTFDetector.DetectSwingPoint(higherTFIndex);
                     
-                if (currentBarOpenTime >= higherTFOpenTime && currentBarOpenTime < nextHigherTFOpenTime)
-                {
-                    higherTFIndex = i;
-                    break;
-                }
-            }
-            
-            if (higherTFIndex < 0 || higherTFIndex < 1 || higherTFIndex >= _higherTimeframeBars.Count - 1)
-                return; // Not enough bars or no matching higher timeframe bar
-            
-            // Check if this is the last bar of the higher timeframe
-            DateTime nextBarOpenTime = (index < Bars.Count - 1) ? Bars.OpenTimes[index + 1] : DateTime.MaxValue;
-            DateTime thisHigherTFOpenTime = _higherTimeframeBars.OpenTimes[higherTFIndex];
-            // Reuse the variable already declared above
-            nextHigherTFOpenTime = (higherTFIndex < _higherTimeframeBars.Count - 1) ? 
-                _higherTimeframeBars.OpenTimes[higherTFIndex + 1] : DateTime.MaxValue;
-                
-            bool isLastBarOfHigherTF = nextBarOpenTime >= nextHigherTFOpenTime;
-            
-            // Only calculate swing points on the last bar of each higher timeframe bar
-            if (!isLastBarOfHigherTF)
-                return;
-            
-            // Higher timeframe candle properties
-            double htfCurrentHigh = _higherTimeframeBars.HighPrices[higherTFIndex];
-            double htfCurrentLow = _higherTimeframeBars.LowPrices[higherTFIndex];
-            double htfCurrentOpen = _higherTimeframeBars.OpenPrices[higherTFIndex];
-            double htfCurrentClose = _higherTimeframeBars.ClosePrices[higherTFIndex];
-            bool htfIsDownCandle = htfCurrentClose < htfCurrentOpen;
-            bool htfIsUpCandle = htfCurrentClose > htfCurrentOpen;
-            
-            // Apply the same swing point logic for higher timeframe, but draw on current timeframe chart
-            
-            // Handle the special case where previous higher TF candle has a swing low
-            if (_lastHigherTFSwingWasLow && _lastHigherTFSwingLowIndex >= 0)
-            {
-                double prevSwingLowValue = _higherTimeframeBars.LowPrices[_lastHigherTFSwingLowIndex];
-                double prevSwingLowCandleHigh = _higherTimeframeBars.HighPrices[_lastHigherTFSwingLowIndex];
-
-                if (htfCurrentLow < prevSwingLowValue && htfCurrentHigh > prevSwingLowCandleHigh)
-                {
-                    if (htfIsDownCandle)
+                    // Only record on the last bar of the higher timeframe
+                    bool isLastBarOfHigherTF = _timeframeMapper.IsLastBarOfHigherTimeframe(index);
+                    bool isLastBar = (index == Bars.Count - 1);
+                    
+                    if (isLastBarOfHigherTF || isLastBar)
                     {
-                        // Set current high as swing high first
-                        HigherTFSwingHighs[index] = htfCurrentHigh;
-                        _lastHigherTFSwingHighIndex = higherTFIndex;
-                        _lastHigherTFSwingHighValue = htfCurrentHigh;
-                        _lastHigherTFSwingWasHigh = true;
-                        _lastHigherTFSwingWasLow = false;
-
-                        // Then set current low as swing low
-                        HigherTFSwingLows[index] = htfCurrentLow;
-                        _lastHigherTFSwingLowIndex = higherTFIndex;
-                        _lastHigherTFSwingLowValue = htfCurrentLow;
-                        _lastHigherTFSwingWasLow = true;
-                        _lastHigherTFSwingWasHigh = false;
-                        
-                        return; // Finished processing this candle
-                    }
-                    else if (htfIsUpCandle)
-                    {
-                        // Find the index of the previous swing low in current timeframe
-                        int prevSwingLowCurrentTFIndex = FindCurrentTimeframeIndexForHigherTimeframe(_lastHigherTFSwingLowIndex);
-                        
-                        if (prevSwingLowCurrentTFIndex >= 0)
+                        // Record swing high history
+                        if (htfSwingPoint.HasSwingHigh)
                         {
-                            // Move the swing low to current candle
-                            HigherTFSwingLows[prevSwingLowCurrentTFIndex] = double.NaN;
+                            var swingHigh = new SwingPointHistory { 
+                                Index = index, 
+                                Value = htfSwingPoint.SwingHighValue, 
+                                HigherTimeframeIndex = higherTFIndex 
+                            };
+                            
+                            // Check if this is replacing a previous swing high
+                            if (htfSwingPoint.ClearPreviousHigh && _higherTFSwingHighHistory.Count > 0)
+                            {
+                                _higherTFSwingHighHistory.RemoveAt(_higherTFSwingHighHistory.Count - 1);
+                            }
+                            
+                            _higherTFSwingHighHistory.Add(swingHigh);
                         }
                         
-                        HigherTFSwingLows[index] = htfCurrentLow;
-                        _lastHigherTFSwingLowIndex = higherTFIndex;
-                        _lastHigherTFSwingLowValue = htfCurrentLow;
-
-                        // Then set current high as swing high
-                        HigherTFSwingHighs[index] = htfCurrentHigh;
-                        _lastHigherTFSwingHighIndex = higherTFIndex;
-                        _lastHigherTFSwingHighValue = htfCurrentHigh;
-                        _lastHigherTFSwingWasHigh = true;
-                        _lastHigherTFSwingWasLow = false;
-                        
-                        return; // Finished processing this candle
-                    }
-                }
-            }
-
-            // Handle the special case where previous higher TF candle has a swing high
-            if (_lastHigherTFSwingWasHigh && _lastHigherTFSwingHighIndex >= 0)
-            {
-                double prevSwingHighValue = _higherTimeframeBars.HighPrices[_lastHigherTFSwingHighIndex];
-                double prevSwingHighCandleLow = _higherTimeframeBars.LowPrices[_lastHigherTFSwingHighIndex];
-
-                if (htfCurrentHigh > prevSwingHighValue && htfCurrentLow < prevSwingHighCandleLow)
-                {
-                    if (htfIsUpCandle)
-                    {
-                        // Set current low as swing low first
-                        HigherTFSwingLows[index] = htfCurrentLow;
-                        _lastHigherTFSwingLowIndex = higherTFIndex;
-                        _lastHigherTFSwingLowValue = htfCurrentLow;
-                        _lastHigherTFSwingWasLow = true;
-                        _lastHigherTFSwingWasHigh = false;
-
-                        // Then set current high as swing high
-                        HigherTFSwingHighs[index] = htfCurrentHigh;
-                        _lastHigherTFSwingHighIndex = higherTFIndex;
-                        _lastHigherTFSwingHighValue = htfCurrentHigh;
-                        _lastHigherTFSwingWasHigh = true;
-                        _lastHigherTFSwingWasLow = false;
-                        
-                        return; // Finished processing this candle
-                    }
-                    else if (htfIsDownCandle)
-                    {
-                        // Find the index of the previous swing high in current timeframe
-                        int prevSwingHighCurrentTFIndex = FindCurrentTimeframeIndexForHigherTimeframe(_lastHigherTFSwingHighIndex);
-                        
-                        if (prevSwingHighCurrentTFIndex >= 0)
+                        // Record swing low history
+                        if (htfSwingPoint.HasSwingLow)
                         {
-                            // Move the swing high to current candle
-                            HigherTFSwingHighs[prevSwingHighCurrentTFIndex] = double.NaN;
+                            var swingLow = new SwingPointHistory { 
+                                Index = index, 
+                                Value = htfSwingPoint.SwingLowValue, 
+                                HigherTimeframeIndex = higherTFIndex 
+                            };
+                            
+                            // Check if this is replacing a previous swing low
+                            if (htfSwingPoint.ClearPreviousLow && _higherTFSwingLowHistory.Count > 0)
+                            {
+                                _higherTFSwingLowHistory.RemoveAt(_higherTFSwingLowHistory.Count - 1);
+                            }
+                            
+                            _higherTFSwingLowHistory.Add(swingLow);
                         }
-                        
-                        HigherTFSwingHighs[index] = htfCurrentHigh;
-                        _lastHigherTFSwingHighIndex = higherTFIndex;
-                        _lastHigherTFSwingHighValue = htfCurrentHigh;
-
-                        // Then set current low as swing low
-                        HigherTFSwingLows[index] = htfCurrentLow;
-                        _lastHigherTFSwingLowIndex = higherTFIndex;
-                        _lastHigherTFSwingLowValue = htfCurrentLow;
-                        _lastHigherTFSwingWasLow = true;
-                        _lastHigherTFSwingWasHigh = false;
-                        
-                        return; // Finished processing this candle
                     }
-                }
-            }
-
-            // Normal swing high detection logic for higher timeframe
-            if (_lastHigherTFSwingWasLow || (!_lastHigherTFSwingWasHigh && !_lastHigherTFSwingWasLow))
-            {
-                // If last swing was a low or no swing yet
-                if (htfCurrentHigh > _lastHigherTFSwingHighValue)
-                {
-                    // New swing high
-                    HigherTFSwingHighs[index] = htfCurrentHigh;
-                    _lastHigherTFSwingHighIndex = higherTFIndex;
-                    _lastHigherTFSwingHighValue = htfCurrentHigh;
-                    _lastHigherTFSwingWasHigh = true;
-                    _lastHigherTFSwingWasLow = false;
-                    return; // Finished processing this candle
-                }
-            }
-            else if (_lastHigherTFSwingWasHigh && _lastHigherTFSwingHighIndex >= 0)
-            {
-                // If last swing was a high
-                if (htfCurrentHigh > _lastHigherTFSwingHighValue)
-                {
-                    // Find the index of the previous swing high in current timeframe
-                    int prevSwingHighCurrentTFIndex = FindCurrentTimeframeIndexForHigherTimeframe(_lastHigherTFSwingHighIndex);
                     
-                    if (prevSwingHighCurrentTFIndex >= 0)
+                    // Always redraw all the higher timeframe swing points we have recorded
+                    // Clear previous drawings
+                    if (index > 0)
                     {
-                        // Move swing high to current candle
-                        HigherTFSwingHighs[prevSwingHighCurrentTFIndex] = double.NaN;
+                        for (int i = 0; i < index; i++)
+                        {
+                            HigherTFSwingHighs[i] = double.NaN;
+                            HigherTFSwingLows[i] = double.NaN;
+                        }
                     }
                     
-                    HigherTFSwingHighs[index] = htfCurrentHigh;
-                    _lastHigherTFSwingHighIndex = higherTFIndex;
-                    _lastHigherTFSwingHighValue = htfCurrentHigh;
-                    return; // Finished processing this candle
-                }
-                
-                // Check if we should create a new swing low
-                if (htfCurrentLow < _higherTimeframeBars.LowPrices[_lastHigherTFSwingHighIndex])
-                {
-                    // New swing low after a swing high
-                    HigherTFSwingLows[index] = htfCurrentLow;
-                    _lastHigherTFSwingLowIndex = higherTFIndex;
-                    _lastHigherTFSwingLowValue = htfCurrentLow;
-                    _lastHigherTFSwingWasLow = true;
-                    _lastHigherTFSwingWasHigh = false;
-                    return; // Finished processing this candle
-                }
-            }
-
-            // Normal swing low detection logic for higher timeframe
-            if (_lastHigherTFSwingWasHigh || (!_lastHigherTFSwingWasHigh && !_lastHigherTFSwingWasLow))
-            {
-                // If last swing was a high or no swing yet
-                if (htfCurrentLow < _lastHigherTFSwingLowValue)
-                {
-                    // New swing low
-                    HigherTFSwingLows[index] = htfCurrentLow;
-                    _lastHigherTFSwingLowIndex = higherTFIndex;
-                    _lastHigherTFSwingLowValue = htfCurrentLow;
-                    _lastHigherTFSwingWasLow = true;
-                    _lastHigherTFSwingWasHigh = false;
-                    return; // Finished processing this candle
-                }
-            }
-            else if (_lastHigherTFSwingWasLow && _lastHigherTFSwingLowIndex >= 0)
-            {
-                // If last swing was a low
-                if (htfCurrentLow < _lastHigherTFSwingLowValue)
-                {
-                    // Find the index of the previous swing low in current timeframe
-                    int prevSwingLowCurrentTFIndex = FindCurrentTimeframeIndexForHigherTimeframe(_lastHigherTFSwingLowIndex);
-                    
-                    if (prevSwingLowCurrentTFIndex >= 0)
+                    // Draw all swing highs
+                    foreach (var swingHigh in _higherTFSwingHighHistory)
                     {
-                        // Move swing low to current candle
-                        HigherTFSwingLows[prevSwingLowCurrentTFIndex] = double.NaN;
+                        HigherTFSwingHighs[swingHigh.Index] = swingHigh.Value;
                     }
                     
-                    HigherTFSwingLows[index] = htfCurrentLow;
-                    _lastHigherTFSwingLowIndex = higherTFIndex;
-                    _lastHigherTFSwingLowValue = htfCurrentLow;
-                    return; // Finished processing this candle
+                    // Draw all swing lows
+                    foreach (var swingLow in _higherTFSwingLowHistory)
+                    {
+                        HigherTFSwingLows[swingLow.Index] = swingLow.Value;
+                    }
+                    
                 }
-                
-                // Check if we should create a new swing high
-                if (htfCurrentHigh > _higherTimeframeBars.HighPrices[_lastHigherTFSwingLowIndex])
-                {
-                    // New swing high after a swing low
-                    HigherTFSwingHighs[index] = htfCurrentHigh;
-                    _lastHigherTFSwingHighIndex = higherTFIndex;
-                    _lastHigherTFSwingHighValue = htfCurrentHigh;
-                    _lastHigherTFSwingWasHigh = true;
-                    _lastHigherTFSwingWasLow = false;
-                    return; // Finished processing this candle
-                }
-            }
-        }
-        
-        private int FindCurrentTimeframeIndexForHigherTimeframe(int higherTFIndex)
-        {
-            if (higherTFIndex < 0 || higherTFIndex >= _higherTimeframeBars.Count)
-                return -1;
-                
-            DateTime higherTFOpenTime = _higherTimeframeBars.OpenTimes[higherTFIndex];
-            long openTimeTicks = higherTFOpenTime.Ticks;
-            
-            if (_higherTFBarOpenTimes.TryGetValue(openTimeTicks, out int currentTFIndex))
-            {
-                return currentTFIndex;
-            }
-            
-            return -1;
-        }
-        
-        private TimeFrame GetTimeFrameFromString(string timeframeStr)
-        {
-            switch (timeframeStr.ToUpper())
-            {
-                case "M1":
-                    return TimeFrame.Minute;
-                case "M5":
-                    return TimeFrame.Minute5;
-                case "M15":
-                    return TimeFrame.Minute15;
-                case "M30":
-                    return TimeFrame.Minute30;
-                case "H1":
-                    return TimeFrame.Hour;
-                case "H4":
-                    return TimeFrame.Hour4;
-                case "D1":
-                    return TimeFrame.Daily;
-                case "W1":
-                    return TimeFrame.Weekly;
-                case "MN1":
-                    return TimeFrame.Monthly;
-                default:
-                    return TimeFrame.Hour4; // Default to H4 if input is invalid
             }
         }
     }
