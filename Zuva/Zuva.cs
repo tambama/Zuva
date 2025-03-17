@@ -34,6 +34,7 @@ namespace cAlgo
         private SwingPointDetector _currentTFDetector;
         private SwingPointDetector _higherTFDetector;
         private HigherTimeframeMapper _timeframeMapper;
+        private int _lastProcessedIndex = -1;
 
         protected override void Initialize()
         {
@@ -64,110 +65,120 @@ namespace cAlgo
             // Need at least 1 bar to calculate
             if (index <= 0)
                 return;
-
-            // Calculate current timeframe swing points
-            if (ShowCurrentTimeframeSwings)
+                
+            // Check if this is a new bar or still the current bar forming
+            bool isNewBar = index > _lastProcessedIndex;
+            bool isLastBar = index == Bars.Count - 1;
+            
+            // Only process closed bars (any bar except the last one) or if this is a historical bar we haven't processed yet
+            if (!isLastBar || (isLastBar && isNewBar && index > 1))
             {
-                SwingPoint swingPoint = _currentTFDetector.DetectSwingPoint(index);
+                // Update the last processed index
+                _lastProcessedIndex = index;
                 
-                if (swingPoint.HasSwingHigh)
+                // Calculate current timeframe swing points
+                if (ShowCurrentTimeframeSwings)
                 {
-                    CurrentTFSwingHighs[index] = swingPoint.SwingHighValue;
-                }
-                
-                if (swingPoint.HasSwingLow)
-                {
-                    CurrentTFSwingLows[index] = swingPoint.SwingLowValue;
-                }
-                
-                // Clear previous swing points if needed
-                if (swingPoint.ClearPreviousHigh && swingPoint.PreviousSwingHighIndex >= 0)
-                {
-                    CurrentTFSwingHighs[swingPoint.PreviousSwingHighIndex] = double.NaN;
-                }
-                
-                if (swingPoint.ClearPreviousLow && swingPoint.PreviousSwingLowIndex >= 0)
-                {
-                    CurrentTFSwingLows[swingPoint.PreviousSwingLowIndex] = double.NaN;
-                }
-            }
-
-            // Calculate higher timeframe swing points if enabled
-            if (UseHigherTimeframe && _higherTFDetector != null && _timeframeMapper != null)
-            {
-                int higherTFIndex = _timeframeMapper.GetHigherTimeframeIndex(index);
-                
-                if (higherTFIndex >= 0)
-                {
-                    // Process the higher timeframe swing detection
-                    SwingPoint htfSwingPoint = _higherTFDetector.DetectSwingPoint(higherTFIndex);
+                    SwingPoint swingPoint = _currentTFDetector.DetectSwingPoint(index);
                     
-                    // Only record on the last bar of the higher timeframe
-                    bool isLastBarOfHigherTF = _timeframeMapper.IsLastBarOfHigherTimeframe(index);
-                    bool isLastBar = (index == Bars.Count - 1);
-                    
-                    if (isLastBarOfHigherTF || isLastBar)
+                    if (swingPoint.HasSwingHigh)
                     {
-                        // Record swing high history
-                        if (htfSwingPoint.HasSwingHigh)
+                        CurrentTFSwingHighs[index] = swingPoint.SwingHighValue;
+                    }
+                    
+                    if (swingPoint.HasSwingLow)
+                    {
+                        CurrentTFSwingLows[index] = swingPoint.SwingLowValue;
+                    }
+                    
+                    // Clear previous swing points if needed
+                    if (swingPoint.ClearPreviousHigh && swingPoint.PreviousSwingHighIndex >= 0)
+                    {
+                        CurrentTFSwingHighs[swingPoint.PreviousSwingHighIndex] = double.NaN;
+                    }
+                    
+                    if (swingPoint.ClearPreviousLow && swingPoint.PreviousSwingLowIndex >= 0)
+                    {
+                        CurrentTFSwingLows[swingPoint.PreviousSwingLowIndex] = double.NaN;
+                    }
+                }
+
+                // Calculate higher timeframe swing points if enabled
+                if (UseHigherTimeframe && _higherTFDetector != null && _timeframeMapper != null)
+                {
+                    int higherTFIndex = _timeframeMapper.GetHigherTimeframeIndex(index);
+                    
+                    if (higherTFIndex >= 0)
+                    {
+                        // Only process higher timeframe bars if they're closed or this is a historical bar
+                        bool isLastBarOfHigherTF = _timeframeMapper.IsLastBarOfHigherTimeframe(index);
+                        
+                        // Process the higher timeframe swing detection if it's a closed higher timeframe bar
+                        // or if we're processing historical data
+                        if (isLastBarOfHigherTF || !isLastBar)
                         {
-                            var swingHigh = new SwingPointHistory { 
-                                Index = index, 
-                                Value = htfSwingPoint.SwingHighValue, 
-                                HigherTimeframeIndex = higherTFIndex 
-                            };
+                            SwingPoint htfSwingPoint = _higherTFDetector.DetectSwingPoint(higherTFIndex);
                             
-                            // Check if this is replacing a previous swing high
-                            if (htfSwingPoint.ClearPreviousHigh && _higherTFSwingHighHistory.Count > 0)
+                            // Record swing high history
+                            if (htfSwingPoint.HasSwingHigh)
                             {
-                                _higherTFSwingHighHistory.RemoveAt(_higherTFSwingHighHistory.Count - 1);
+                                var swingHigh = new SwingPointHistory { 
+                                    Index = index, 
+                                    Value = htfSwingPoint.SwingHighValue, 
+                                    HigherTimeframeIndex = higherTFIndex 
+                                };
+                                
+                                // Check if this is replacing a previous swing high
+                                if (htfSwingPoint.ClearPreviousHigh && _higherTFSwingHighHistory.Count > 0)
+                                {
+                                    _higherTFSwingHighHistory.RemoveAt(_higherTFSwingHighHistory.Count - 1);
+                                }
+                                
+                                _higherTFSwingHighHistory.Add(swingHigh);
                             }
                             
-                            _higherTFSwingHighHistory.Add(swingHigh);
+                            // Record swing low history
+                            if (htfSwingPoint.HasSwingLow)
+                            {
+                                var swingLow = new SwingPointHistory { 
+                                    Index = index, 
+                                    Value = htfSwingPoint.SwingLowValue, 
+                                    HigherTimeframeIndex = higherTFIndex 
+                                };
+                                
+                                // Check if this is replacing a previous swing low
+                                if (htfSwingPoint.ClearPreviousLow && _higherTFSwingLowHistory.Count > 0)
+                                {
+                                    _higherTFSwingLowHistory.RemoveAt(_higherTFSwingLowHistory.Count - 1);
+                                }
+                                
+                                _higherTFSwingLowHistory.Add(swingLow);
+                            }
                         }
                         
-                        // Record swing low history
-                        if (htfSwingPoint.HasSwingLow)
+                        // Always redraw all the higher timeframe swing points we have recorded
+                        // Clear previous drawings
+                        if (index > 0)
                         {
-                            var swingLow = new SwingPointHistory { 
-                                Index = index, 
-                                Value = htfSwingPoint.SwingLowValue, 
-                                HigherTimeframeIndex = higherTFIndex 
-                            };
-                            
-                            // Check if this is replacing a previous swing low
-                            if (htfSwingPoint.ClearPreviousLow && _higherTFSwingLowHistory.Count > 0)
+                            for (int i = 0; i < index; i++)
                             {
-                                _higherTFSwingLowHistory.RemoveAt(_higherTFSwingLowHistory.Count - 1);
+                                HigherTFSwingHighs[i] = double.NaN;
+                                HigherTFSwingLows[i] = double.NaN;
                             }
-                            
-                            _higherTFSwingLowHistory.Add(swingLow);
                         }
-                    }
-                    
-                    // Always redraw all the higher timeframe swing points we have recorded
-                    // Clear previous drawings
-                    if (index > 0)
-                    {
-                        for (int i = 0; i < index; i++)
+                        
+                        // Draw all swing highs
+                        foreach (var swingHigh in _higherTFSwingHighHistory)
                         {
-                            HigherTFSwingHighs[i] = double.NaN;
-                            HigherTFSwingLows[i] = double.NaN;
+                            HigherTFSwingHighs[swingHigh.Index] = swingHigh.Value;
+                        }
+                        
+                        // Draw all swing lows
+                        foreach (var swingLow in _higherTFSwingLowHistory)
+                        {
+                            HigherTFSwingLows[swingLow.Index] = swingLow.Value;
                         }
                     }
-                    
-                    // Draw all swing highs
-                    foreach (var swingHigh in _higherTFSwingHighHistory)
-                    {
-                        HigherTFSwingHighs[swingHigh.Index] = swingHigh.Value;
-                    }
-                    
-                    // Draw all swing lows
-                    foreach (var swingLow in _higherTFSwingLowHistory)
-                    {
-                        HigherTFSwingLows[swingLow.Index] = swingLow.Value;
-                    }
-                    
                 }
             }
         }
