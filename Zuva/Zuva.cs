@@ -19,11 +19,8 @@ namespace Zuva
 
         protected override void Initialize()
         {
-            // Initialize the swing detector
-            _swingDetector = new SwingPointDetector(
-                Bars,
-                SwingHighs,
-                SwingLows);
+            // Initialize the swing detector with just the data series
+            _swingDetector = new SwingPointDetector(SwingHighs, SwingLows);
         }
 
         public override void Calculate(int index)
@@ -35,7 +32,14 @@ namespace Zuva
             // Calculate swing points
             if (ShowSwingPoints)
             {
-                _swingDetector.ProcessBar(index);
+                // Pass the current bar properties instead of the whole Bars collection
+                _swingDetector.ProcessBar(
+                    index,
+                    Bars.HighPrices[index],
+                    Bars.LowPrices[index],
+                    Bars.OpenPrices[index],
+                    Bars.ClosePrices[index]
+                );
             }
         }
     }
