@@ -40,6 +40,55 @@ namespace Zuva.Helpers
         }
         
         /// <summary>
+        /// Gets the number of current timeframe bars that make up a single higher timeframe bar
+        /// </summary>
+        /// <param name="currentTimeframe">The current timeframe</param>
+        /// <param name="higherTimeframe">The higher timeframe</param>
+        /// <returns>The number of current timeframe bars in one higher timeframe bar</returns>
+        public static int GetPeriodicity(TimeFrame currentTimeframe, TimeFrame higherTimeframe)
+        {
+            // Convert timeframes to minutes for calculation
+            int currentMinutes = TimeFrameToMinutes(currentTimeframe);
+            int higherMinutes = TimeFrameToMinutes(higherTimeframe);
+            
+            // Calculate how many current timeframe bars fit in one higher timeframe bar
+            if (currentMinutes == 0 || higherMinutes == 0 || currentMinutes > higherMinutes)
+                return 0; // Invalid case or current timeframe is larger than higher timeframe
+                
+            return higherMinutes / currentMinutes;
+        }
+        
+        /// <summary>
+        /// Converts a TimeFrame to its equivalent in minutes
+        /// </summary>
+        /// <param name="timeFrame">The TimeFrame to convert</param>
+        /// <returns>The number of minutes in the TimeFrame</returns>
+        private static int TimeFrameToMinutes(TimeFrame timeFrame)
+        {
+            // Map timeframes to their equivalent in minutes
+            if (timeFrame == TimeFrame.Minute)
+                return 1;
+            else if (timeFrame == TimeFrame.Minute5)
+                return 5;
+            else if (timeFrame == TimeFrame.Minute15)
+                return 15;
+            else if (timeFrame == TimeFrame.Minute30)
+                return 30;
+            else if (timeFrame == TimeFrame.Hour)
+                return 60;
+            else if (timeFrame == TimeFrame.Hour4)
+                return 240;
+            else if (timeFrame == TimeFrame.Daily)
+                return 1440; // 24 hours * 60 minutes
+            else if (timeFrame == TimeFrame.Weekly)
+                return 10080; // 7 days * 24 hours * 60 minutes
+            else if (timeFrame == TimeFrame.Monthly)
+                return 43200; // Approximation: 30 days * 24 hours * 60 minutes
+            else
+                return 0;
+        }
+        
+        /// <summary>
         /// Maps higher timeframe bars to current timeframe indices
         /// </summary>
         public static Dictionary<long, int> MapHigherTimeframeToCurrent(Bars currentTFBars, Bars higherTFBars)
@@ -63,46 +112,6 @@ namespace Zuva.Helpers
             }
             
             return higherTFBarOpenTimes;
-        }
-        
-        /// <summary>
-        /// Gets the current timeframe index that corresponds to a higher timeframe bar
-        /// </summary>
-        public static int FindCurrentTimeframeIndexForHigherTimeframe(
-            int higherTFIndex, 
-            Bars higherTFBars, 
-            Dictionary<long, int> higherTFBarOpenTimes)
-        {
-            if (higherTFIndex < 0 || higherTFIndex >= higherTFBars.Count)
-                return -1;
-                
-            DateTime higherTFOpenTime = higherTFBars.OpenTimes[higherTFIndex];
-            long openTimeTicks = higherTFOpenTime.Ticks;
-            
-            if (higherTFBarOpenTimes.TryGetValue(openTimeTicks, out int currentTFIndex))
-            {
-                return currentTFIndex;
-            }
-            
-            return -1;
-        }
-        
-        /// <summary>
-        /// Determines if the current bar is the last bar of a higher timeframe
-        /// </summary>
-        public static bool IsLastBarOfHigherTimeframe(
-            int currentIndex, 
-            Bars currentTFBars,
-            int higherTFIndex,
-            Bars higherTFBars)
-        {
-            if (currentIndex >= currentTFBars.Count - 1 || higherTFIndex >= higherTFBars.Count - 1)
-                return false;
-            
-            DateTime nextBarOpenTime = currentTFBars.OpenTimes[currentIndex + 1];
-            DateTime nextHigherTFOpenTime = higherTFBars.OpenTimes[higherTFIndex + 1];
-            
-            return nextBarOpenTime >= nextHigherTFOpenTime;
         }
     }
 }

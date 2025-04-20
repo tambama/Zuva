@@ -75,7 +75,6 @@ namespace Zuva
             // High Timeframe Processing
             if (_currentBar != null && _currentBar.OpenTime.Minute == 00)
             {
-                
             }
         }
         
