@@ -1,5 +1,7 @@
 using cAlgo.API;
 using Zuva.Services;
+using Zuva.Models;
+using System.Collections.Generic;
 
 namespace Zuva
 {
@@ -16,11 +18,13 @@ namespace Zuva
         public IndicatorDataSeries SwingLows { get; set; }
 
         private SwingPointDetector _swingDetector;
+        private List<SwingPoint> _swingPoints;
 
         protected override void Initialize()
         {
-            // Initialize the swing detector with just the data series
+            // Initialize the swing detector
             _swingDetector = new SwingPointDetector(SwingHighs, SwingLows);
+            _swingPoints = new List<SwingPoint>();
         }
 
         public override void Calculate(int index)
@@ -32,15 +36,35 @@ namespace Zuva
             // Calculate swing points
             if (ShowSwingPoints)
             {
-                // Pass the current bar properties instead of the whole Bars collection
+                // Pass the current bar properties
                 _swingDetector.ProcessBar(
                     index,
-                    Bars.HighPrices[index],
-                    Bars.LowPrices[index],
-                    Bars.OpenPrices[index],
-                    Bars.ClosePrices[index]
+                    Bars[index]
                 );
+                
+                // Update the relationships between swing points
+                if (index == Bars.Count - 1) // Only on the last bar for efficiency
+                {
+                    _swingDetector.UpdateSwingPointRelationships();
+                    _swingPoints = _swingDetector.GetAllSwingPoints();
+                }
             }
+        }
+        
+        // Methods to expose swing points to other components
+        public List<SwingPoint> GetAllSwingPoints()
+        {
+            return _swingPoints;
+        }
+        
+        public SwingPoint GetLastSwingHigh()
+        {
+            return _swingDetector.GetLastSwingHigh();
+        }
+        
+        public SwingPoint GetLastSwingLow()
+        {
+            return _swingDetector.GetLastSwingLow();
         }
     }
 }

@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using cAlgo.API;
 using Zuva.Models;
 
@@ -15,12 +17,15 @@ namespace Zuva.Services
         private bool _lastSwingWasHigh = false;
         private bool _lastSwingWasLow = false;
         
-        // Store the high and low values of the swing point candles
-        private double _lastSwingHighCandleLow = double.MaxValue;
-        private double _lastSwingLowCandleHigh = double.MinValue;
-        
         private readonly IndicatorDataSeries _swingHighs;
         private readonly IndicatorDataSeries _swingLows;
+        
+        // Collection to store all swing points
+        private readonly List<SwingPoint> _swingPoints = new List<SwingPoint>();
+        
+        // Reference to the last high and low swing points
+        private SwingPoint _lastHighSwingPoint;
+        private SwingPoint _lastLowSwingPoint;
         
         public SwingPointDetector(IndicatorDataSeries swingHighs, IndicatorDataSeries swingLows)
         {
@@ -28,40 +33,72 @@ namespace Zuva.Services
             _swingLows = swingLows;
         }
         
-        public void ProcessBar(int index, double currentHigh, double currentLow, double currentOpen, double currentClose)
+        public void ProcessBar(int index, Bar bar)
         {
             // Need at least 1 bar to calculate
             if (index <= 0)
                 return;
+            
+            var close = bar.Close;
+            var open = bar.Open;
+            var low = bar.Low;
+            var high = bar.High;
+            var time = bar.OpenTime;
 
-            bool isDownCandle = currentClose < currentOpen;
-            bool isUpCandle = currentClose > currentOpen;
+            bool isDownCandle = close < open;
+            bool isUpCandle = close > open;
 
             // Handle the special case where previous candle has a swing low
-            if (_lastSwingWasLow && _lastSwingLowIndex >= 0)
+            if (_lastSwingWasLow && _lastSwingLowIndex >= 0 && _lastLowSwingPoint != null)
             {
                 double prevSwingLowValue = _lastSwingLowValue;
-                double prevSwingLowCandleHigh = _lastSwingLowCandleHigh;
+                double prevSwingLowCandleHigh = _lastLowSwingPoint.Bar.High;
 
-                if (currentLow < prevSwingLowValue && currentHigh > prevSwingLowCandleHigh)
+                if (low < prevSwingLowValue && high > prevSwingLowCandleHigh)
                 {
                     if (isDownCandle)
                     {
                         // Set current high as swing high first
-                        _swingHighs[index] = currentHigh;
+                        _swingHighs[index] = high;
                         _lastSwingHighIndex = index;
-                        _lastSwingHighValue = currentHigh;
-                        _lastSwingHighCandleLow = currentLow;
+                        _lastSwingHighValue = high;
                         _lastSwingWasHigh = true;
                         _lastSwingWasLow = false;
 
+                        // Create new high swing point
+                        var highSwingPoint = new SwingPoint(
+                            index,
+                            high,
+                            time,
+                            bar,
+                            SwingType.H,
+                            LiquidityType.Normal,
+                            Direction.Up
+                        );
+                        
+                        _swingPoints.Add(highSwingPoint);
+                        _lastHighSwingPoint = highSwingPoint;
+
                         // Then set current low as swing low
-                        _swingLows[index] = currentLow;
+                        _swingLows[index] = low;
                         _lastSwingLowIndex = index;
-                        _lastSwingLowValue = currentLow;
-                        _lastSwingLowCandleHigh = currentHigh;
+                        _lastSwingLowValue = low;
                         _lastSwingWasLow = true;
                         _lastSwingWasHigh = false;
+                        
+                        // Create new low swing point
+                        var lowSwingPoint = new SwingPoint(
+                            index,
+                            low,
+                            time,
+                            bar,
+                            SwingType.L,
+                            LiquidityType.Normal,
+                            Direction.Down
+                        );
+                        
+                        _swingPoints.Add(lowSwingPoint);
+                        _lastLowSwingPoint = lowSwingPoint;
                         
                         return; // Finished processing this candle
                     }
@@ -69,18 +106,47 @@ namespace Zuva.Services
                     {
                         // Move the swing low to current candle
                         _swingLows[_lastSwingLowIndex] = double.NaN;
-                        _swingLows[index] = currentLow;
+                        _swingLows[index] = low;
                         _lastSwingLowIndex = index;
-                        _lastSwingLowValue = currentLow;
-                        _lastSwingLowCandleHigh = currentHigh;
+                        _lastSwingLowValue = low;
+                        
+                        // Remove the old swing point and add a new one
+                        _swingPoints.Remove(_lastLowSwingPoint);
+                        
+                        // Create new low swing point
+                        var lowSwingPoint = new SwingPoint(
+                            index,
+                            low,
+                            time,
+                            bar,
+                            SwingType.L,
+                            LiquidityType.Normal,
+                            Direction.Down
+                        );
+                        
+                        _swingPoints.Add(lowSwingPoint);
+                        _lastLowSwingPoint = lowSwingPoint;
 
                         // Then set current high as swing high
-                        _swingHighs[index] = currentHigh;
+                        _swingHighs[index] = high;
                         _lastSwingHighIndex = index;
-                        _lastSwingHighValue = currentHigh;
-                        _lastSwingHighCandleLow = currentLow;
+                        _lastSwingHighValue = high;
                         _lastSwingWasHigh = true;
                         _lastSwingWasLow = false;
+                        
+                        // Create new high swing point
+                        var highSwingPoint = new SwingPoint(
+                            index,
+                            high,
+                            time,
+                            bar,
+                            SwingType.H,
+                            LiquidityType.Normal,
+                            Direction.Up
+                        );
+                        
+                        _swingPoints.Add(highSwingPoint);
+                        _lastHighSwingPoint = highSwingPoint;
                         
                         return; // Finished processing this candle
                     }
@@ -88,30 +154,56 @@ namespace Zuva.Services
             }
 
             // Handle the special case where previous candle has a swing high
-            if (_lastSwingWasHigh && _lastSwingHighIndex >= 0)
+            if (_lastSwingWasHigh && _lastSwingHighIndex >= 0 && _lastHighSwingPoint != null)
             {
                 double prevSwingHighValue = _lastSwingHighValue;
-                double prevSwingHighCandleLow = _lastSwingHighCandleLow;
+                double prevSwingHighCandleLow = _lastHighSwingPoint.Bar.Low;
 
-                if (currentHigh > prevSwingHighValue && currentLow < prevSwingHighCandleLow)
+                if (high > prevSwingHighValue && low < prevSwingHighCandleLow)
                 {
                     if (isUpCandle)
                     {
                         // Set current low as swing low first
-                        _swingLows[index] = currentLow;
+                        _swingLows[index] = low;
                         _lastSwingLowIndex = index;
-                        _lastSwingLowValue = currentLow;
-                        _lastSwingLowCandleHigh = currentHigh;
+                        _lastSwingLowValue = low;
                         _lastSwingWasLow = true;
                         _lastSwingWasHigh = false;
 
+                        // Create new low swing point
+                        var lowSwingPoint = new SwingPoint(
+                            index,
+                            low,
+                            time,
+                            bar,
+                            SwingType.L,
+                            LiquidityType.Normal,
+                            Direction.Down
+                        );
+                        
+                        _swingPoints.Add(lowSwingPoint);
+                        _lastLowSwingPoint = lowSwingPoint;
+
                         // Then set current high as swing high
-                        _swingHighs[index] = currentHigh;
+                        _swingHighs[index] = high;
                         _lastSwingHighIndex = index;
-                        _lastSwingHighValue = currentHigh;
-                        _lastSwingHighCandleLow = currentLow;
+                        _lastSwingHighValue = high;
                         _lastSwingWasHigh = true;
                         _lastSwingWasLow = false;
+                        
+                        // Create new high swing point
+                        var highSwingPoint = new SwingPoint(
+                            index,
+                            high,
+                            time,
+                            bar,
+                            SwingType.H,
+                            LiquidityType.Normal,
+                            Direction.Up
+                        );
+                        
+                        _swingPoints.Add(highSwingPoint);
+                        _lastHighSwingPoint = highSwingPoint;
                         
                         return; // Finished processing this candle
                     }
@@ -119,18 +211,47 @@ namespace Zuva.Services
                     {
                         // Move the swing high to current candle
                         _swingHighs[_lastSwingHighIndex] = double.NaN;
-                        _swingHighs[index] = currentHigh;
+                        _swingHighs[index] = high;
                         _lastSwingHighIndex = index;
-                        _lastSwingHighValue = currentHigh;
-                        _lastSwingHighCandleLow = currentLow;
+                        _lastSwingHighValue = high;
+                        
+                        // Remove the old swing point and add a new one
+                        _swingPoints.Remove(_lastHighSwingPoint);
+                        
+                        // Create new high swing point
+                        var highSwingPoint = new SwingPoint(
+                            index,
+                            high,
+                            time,
+                            bar,
+                            SwingType.H,
+                            LiquidityType.Normal,
+                            Direction.Up
+                        );
+                        
+                        _swingPoints.Add(highSwingPoint);
+                        _lastHighSwingPoint = highSwingPoint;
 
                         // Then set current low as swing low
-                        _swingLows[index] = currentLow;
+                        _swingLows[index] = low;
                         _lastSwingLowIndex = index;
-                        _lastSwingLowValue = currentLow;
-                        _lastSwingLowCandleHigh = currentHigh;
+                        _lastSwingLowValue = low;
                         _lastSwingWasLow = true;
                         _lastSwingWasHigh = false;
+                        
+                        // Create new low swing point
+                        var lowSwingPoint = new SwingPoint(
+                            index,
+                            low,
+                            time,
+                            bar,
+                            SwingType.L,
+                            LiquidityType.Normal,
+                            Direction.Down
+                        );
+                        
+                        _swingPoints.Add(lowSwingPoint);
+                        _lastLowSwingPoint = lowSwingPoint;
                         
                         return; // Finished processing this candle
                     }
@@ -141,42 +262,87 @@ namespace Zuva.Services
             if (_lastSwingWasLow || (!_lastSwingWasHigh && !_lastSwingWasLow))
             {
                 // If last swing was a low or no swing yet
-                if (currentHigh > _lastSwingHighValue)
+                if (high > _lastSwingHighValue)
                 {
                     // New swing high
-                    _swingHighs[index] = currentHigh;
+                    _swingHighs[index] = high;
                     _lastSwingHighIndex = index;
-                    _lastSwingHighValue = currentHigh;
-                    _lastSwingHighCandleLow = currentLow;
+                    _lastSwingHighValue = high;
                     _lastSwingWasHigh = true;
                     _lastSwingWasLow = false;
+                    
+                    // Create new high swing point
+                    var highSwingPoint = new SwingPoint(
+                        index,
+                        high,
+                        time,
+                        bar,
+                        SwingType.H,
+                        LiquidityType.Normal,
+                        Direction.Up
+                    );
+                    
+                    _swingPoints.Add(highSwingPoint);
+                    _lastHighSwingPoint = highSwingPoint;
+                    
                     return; // Finished processing this candle
                 }
             }
-            else if (_lastSwingWasHigh && _lastSwingHighIndex >= 0)
+            else if (_lastSwingWasHigh && _lastSwingHighIndex >= 0 && _lastHighSwingPoint != null)
             {
                 // If last swing was a high
-                if (currentHigh > _lastSwingHighValue)
+                if (high > _lastSwingHighValue)
                 {
                     // Move swing high to current candle
                     _swingHighs[_lastSwingHighIndex] = double.NaN;
-                    _swingHighs[index] = currentHigh;
+                    _swingHighs[index] = high;
                     _lastSwingHighIndex = index;
-                    _lastSwingHighValue = currentHigh;
-                    _lastSwingHighCandleLow = currentLow;
+                    _lastSwingHighValue = high;
+                    
+                    // Remove the old swing point and add a new one
+                    _swingPoints.Remove(_lastHighSwingPoint);
+                    
+                    // Create new high swing point
+                    var highSwingPoint = new SwingPoint(
+                        index,
+                        high,
+                        time,
+                        bar,
+                        SwingType.H,
+                        LiquidityType.Normal,
+                        Direction.Up
+                    );
+                    
+                    _swingPoints.Add(highSwingPoint);
+                    _lastHighSwingPoint = highSwingPoint;
+                    
                     return; // Finished processing this candle
                 }
                 
                 // Check if we should create a new swing low
-                if (currentLow < _lastSwingHighCandleLow)
+                if (low < _lastHighSwingPoint.Bar.Low)
                 {
                     // New swing low after a swing high
-                    _swingLows[index] = currentLow;
+                    _swingLows[index] = low;
                     _lastSwingLowIndex = index;
-                    _lastSwingLowValue = currentLow;
-                    _lastSwingLowCandleHigh = currentHigh;
+                    _lastSwingLowValue = low;
                     _lastSwingWasLow = true;
                     _lastSwingWasHigh = false;
+                    
+                    // Create new low swing point
+                    var lowSwingPoint = new SwingPoint(
+                        index,
+                        low,
+                        time,
+                        bar,
+                        SwingType.L,
+                        LiquidityType.Normal,
+                        Direction.Down
+                    );
+                    
+                    _swingPoints.Add(lowSwingPoint);
+                    _lastLowSwingPoint = lowSwingPoint;
+                    
                     return; // Finished processing this candle
                 }
             }
@@ -185,66 +351,186 @@ namespace Zuva.Services
             if (_lastSwingWasHigh || (!_lastSwingWasHigh && !_lastSwingWasLow))
             {
                 // If last swing was a high or no swing yet
-                if (currentLow < _lastSwingLowValue)
+                if (low < _lastSwingLowValue)
                 {
                     // New swing low
-                    _swingLows[index] = currentLow;
+                    _swingLows[index] = low;
                     _lastSwingLowIndex = index;
-                    _lastSwingLowValue = currentLow;
-                    _lastSwingLowCandleHigh = currentHigh;
+                    _lastSwingLowValue = low;
                     _lastSwingWasLow = true;
                     _lastSwingWasHigh = false;
+                    
+                    // Create new low swing point
+                    var lowSwingPoint = new SwingPoint(
+                        index,
+                        low,
+                        time,
+                        bar,
+                        SwingType.L,
+                        LiquidityType.Normal,
+                        Direction.Down
+                    );
+                    
+                    _swingPoints.Add(lowSwingPoint);
+                    _lastLowSwingPoint = lowSwingPoint;
+                    
                     return; // Finished processing this candle
                 }
             }
-            else if (_lastSwingWasLow && _lastSwingLowIndex >= 0)
+            else if (_lastSwingWasLow && _lastSwingLowIndex >= 0 && _lastLowSwingPoint != null)
             {
                 // If last swing was a low
-                if (currentLow < _lastSwingLowValue)
+                if (low < _lastSwingLowValue)
                 {
                     // Move swing low to current candle
                     _swingLows[_lastSwingLowIndex] = double.NaN;
-                    _swingLows[index] = currentLow;
+                    _swingLows[index] = low;
                     _lastSwingLowIndex = index;
-                    _lastSwingLowValue = currentLow;
-                    _lastSwingLowCandleHigh = currentHigh;
+                    _lastSwingLowValue = low;
+                    
+                    // Remove the old swing point and add a new one
+                    _swingPoints.Remove(_lastLowSwingPoint);
+                    
+                    // Create new low swing point
+                    var lowSwingPoint = new SwingPoint(
+                        index,
+                        low,
+                        time,
+                        bar,
+                        SwingType.L,
+                        LiquidityType.Normal,
+                        Direction.Down
+                    );
+                    
+                    _swingPoints.Add(lowSwingPoint);
+                    _lastLowSwingPoint = lowSwingPoint;
+                    
                     return; // Finished processing this candle
                 }
                 
                 // Check if we should create a new swing high
-                if (currentHigh > _lastSwingLowCandleHigh)
+                if (high > _lastLowSwingPoint.Bar.High)
                 {
                     // New swing high after a swing low
-                    _swingHighs[index] = currentHigh;
+                    _swingHighs[index] = high;
                     _lastSwingHighIndex = index;
-                    _lastSwingHighValue = currentHigh;
-                    _lastSwingHighCandleLow = currentLow;
+                    _lastSwingHighValue = high;
                     _lastSwingWasHigh = true;
                     _lastSwingWasLow = false;
+                    
+                    // Create new high swing point
+                    var highSwingPoint = new SwingPoint(
+                        index,
+                        high,
+                        time,
+                        bar,
+                        SwingType.H,
+                        LiquidityType.Normal,
+                        Direction.Up
+                    );
+                    
+                    _swingPoints.Add(highSwingPoint);
+                    _lastHighSwingPoint = highSwingPoint;
+                    
                     return; // Finished processing this candle
                 }
             }
         }
         
-        // Optional: Add methods to retrieve swing point information
-        public bool IsSwingHigh(int index)
+        // Methods to retrieve swing points
+        public List<SwingPoint> GetAllSwingPoints()
         {
-            return !double.IsNaN(_swingHighs[index]);
+            return _swingPoints;
         }
         
-        public bool IsSwingLow(int index)
+        public List<SwingPoint> GetSwingHighs()
         {
-            return !double.IsNaN(_swingLows[index]);
+            return _swingPoints.FindAll(sp => sp.SwingType == SwingType.H);
         }
         
-        public int GetLastSwingHighIndex()
+        public List<SwingPoint> GetSwingLows()
         {
-            return _lastSwingHighIndex;
+            return _swingPoints.FindAll(sp => sp.SwingType == SwingType.L);
         }
         
-        public int GetLastSwingLowIndex()
+        public SwingPoint GetLastSwingHigh()
         {
-            return _lastSwingLowIndex;
+            return _lastHighSwingPoint;
+        }
+        
+        public SwingPoint GetLastSwingLow()
+        {
+            return _lastLowSwingPoint;
+        }
+        
+        // Get swing point at specific index
+        public SwingPoint GetSwingPointAtIndex(int index)
+        {
+            return _swingPoints.Find(sp => sp.Index == index);
+        }
+        
+        // Check if there's a swing point at specific index
+        public bool HasSwingPointAtIndex(int index)
+        {
+            return _swingPoints.Exists(sp => sp.Index == index);
+        }
+        
+        // Get previous and next swing points
+        public SwingPoint GetPreviousSwingPoint(SwingPoint currentPoint)
+        {
+            if (currentPoint == null) return null;
+            
+            return _swingPoints
+                .FindLast(sp => sp.Index < currentPoint.Index && sp.SwingType == currentPoint.SwingType);
+        }
+        
+        public SwingPoint GetNextSwingPoint(SwingPoint currentPoint)
+        {
+            if (currentPoint == null) return null;
+            
+            return _swingPoints
+                .Find(sp => sp.Index > currentPoint.Index && sp.SwingType == currentPoint.SwingType);
+        }
+        
+        // Update previous and next pointers for all swing points
+        public void UpdateSwingPointRelationships()
+        {
+            // Sort by index to ensure proper order
+            _swingPoints.Sort((a, b) => a.Index.CompareTo(b.Index));
+            
+            // Process high swing points
+            var highPoints = GetSwingHighs();
+            highPoints.Sort((a, b) => a.Index.CompareTo(b.Index));
+            
+            for (int i = 0; i < highPoints.Count; i++)
+            {
+                if (i > 0)
+                {
+                    highPoints[i].PreviousIndex = highPoints[i - 1].Index;
+                }
+                
+                if (i < highPoints.Count - 1)
+                {
+                    highPoints[i].NextIndex = highPoints[i + 1].Index;
+                }
+            }
+            
+            // Process low swing points
+            var lowPoints = GetSwingLows();
+            lowPoints.Sort((a, b) => a.Index.CompareTo(b.Index));
+            
+            for (int i = 0; i < lowPoints.Count; i++)
+            {
+                if (i > 0)
+                {
+                    lowPoints[i].PreviousIndex = lowPoints[i - 1].Index;
+                }
+                
+                if (i < lowPoints.Count - 1)
+                {
+                    lowPoints[i].NextIndex = lowPoints[i + 1].Index;
+                }
+            }
         }
     }
 }

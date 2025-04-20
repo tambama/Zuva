@@ -1,0 +1,24 @@
+using System;
+using cAlgo.API;
+
+namespace Zuva.Models;
+
+public class Candle
+{
+    public Candle(Bar bar, int index)
+    {
+        Index = index;
+        Time = bar.OpenTime;
+        Open = bar.Open;
+        High = bar.High;
+        Low = bar.Low;
+        Close = bar.Close;
+    }
+
+    public int Index { get; set; }
+    public DateTime Time { get; set; }
+    public double Open { get; set; }
+    public double High { get; set; }
+    public double Low { get; set; }
+    public double Close { get; set; }
+}
