@@ -3,6 +3,7 @@ using Zuva.Services;
 using Zuva.Models;
 using System.Collections.Generic;
 using Zuva.Extensions;
+using System;
 
 namespace Zuva
 {
@@ -18,10 +19,10 @@ namespace Zuva
         [Parameter("HTF", DefaultValue = "H1")]
         public string HTF { get; set; }
 
-        [Output("Swing High", Color = Colors.Green, PlotType = PlotType.Points, Thickness = 4)]
+        [Output("Swing High", Color = Colors.White, PlotType = PlotType.Points, Thickness = 4)]
         public IndicatorDataSeries SwingHighs { get; set; }
 
-        [Output("Swing Low", Color = Colors.Red, PlotType = PlotType.Points, Thickness = 4)]
+        [Output("Swing Low", Color = Colors.White, PlotType = PlotType.Points, Thickness = 4)]
         public IndicatorDataSeries SwingLows { get; set; }
         
         [Output("HTF Swing High", Color = Colors.Green, PlotType = PlotType.Points, Thickness = 8)]
@@ -36,6 +37,9 @@ namespace Zuva
         private List<SwingPoint> _htfSwingPoints;
         
         private TimeFrame _highTimeFrame;
+        
+        // Keep track of processed HTF bars to avoid duplicate processing
+        private readonly Dictionary<DateTime, bool> _processedHtfBars = new Dictionary<DateTime, bool>();
         
         private Bar _currentBar;
         private int _currentBarIndex;
@@ -63,7 +67,7 @@ namespace Zuva
 
             if (ShowSwingPoints)
             {
-                // Pass the current bar properties
+                // Pass the current bar properties to the regular swing detector
                 _swingDetector.ProcessBar(
                     index - 1,
                     new Candle(_currentBar, index - 1)
@@ -78,21 +82,58 @@ namespace Zuva
             }
             
             // High Timeframe Processing
-            if (_currentBar.OpenTime.IsStartOfHigherTimeframeBar(_highTimeFrame))
+            if (ShowHtfSwingPoints && _currentBar.OpenTime.IsStartOfHigherTimeframeBar(_highTimeFrame))
             {
                 // Get the previous HTF bar indices
-                var (startIndex, endIndex) = Bars.GetPreviousHigherTimeframeBarRange(_currentBarIndex, HTF.GetTimeFrameFromString());
+                var (startIndex, endIndex) = Bars.GetPreviousHigherTimeframeBarRange(_currentBarIndex, _highTimeFrame);
 
                 if (startIndex >= 0 && endIndex >= 0)
                 {
-                    // Now you can analyze the previous higher timeframe bar
-                    var candle = Bars.GetHigherTimeframeCandle(startIndex, endIndex);
-                    // Use these values in your trading strategy...
+                    // Create the HTF candle from the range of bars
+                    var htfCandle = Bars.GetHigherTimeframeCandle(startIndex, endIndex);
                     
-                    Chart.DrawTrendLine($"{candle.TimeOfLow}", candle.TimeOfLow.Value, candle.Low, _currentBar.OpenTime, candle.Low, Color.Pink);
-                    Chart.DrawTrendLine($"{candle.TimeOfHigh}", candle.TimeOfHigh.Value, candle.High, _currentBar.OpenTime, candle.High, Color.Pink);
-                    
-                    // TODO: Implement HTF swing point detection.
+                    // Check if we've already processed this HTF bar
+                    if (htfCandle != null && !_processedHtfBars.ContainsKey(htfCandle.Time))
+                    {
+                        // Process the HTF candle using our specialized HTF swing point detector
+                        _htfSwingDetector.ProcessHighTimeframeBar(htfCandle);
+                        
+                        // Mark this HTF bar as processed
+                        _processedHtfBars[htfCandle.Time] = true;
+                        
+                        // Update HTF swing point relationships at the end of all calculations
+                        if (index == Bars.Count - 1)
+                        {
+                            _htfSwingDetector.UpdateSwingPointRelationships();
+                            _htfSwingPoints = _htfSwingDetector.GetAllSwingPoints();
+                        }
+                        
+                        // Optionally draw HTF levels on the chart
+                        if (false && htfCandle.TimeOfLow.HasValue && htfCandle.TimeOfHigh.HasValue)
+                        {
+                            Chart.DrawTrendLine(
+                                $"htf-low-{htfCandle.Time}", 
+                                htfCandle.TimeOfLow.Value, 
+                                htfCandle.Low, 
+                                _currentBar.OpenTime.AddHours(1), // Extend a bit for visibility
+                                htfCandle.Low, 
+                                Color.DarkGoldenrod, 
+                                1, 
+                                LineStyle.Solid
+                            );
+                            
+                            Chart.DrawTrendLine(
+                                $"htf-high-{htfCandle.Time}", 
+                                htfCandle.TimeOfHigh.Value, 
+                                htfCandle.High, 
+                                _currentBar.OpenTime.AddHours(1), // Extend a bit for visibility
+                                htfCandle.High, 
+                                Color.DarkGoldenrod, 
+                                1, 
+                                LineStyle.Solid
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -103,6 +144,11 @@ namespace Zuva
             return _swingPoints;
         }
         
+        public List<SwingPoint> GetAllHtfSwingPoints()
+        {
+            return _htfSwingPoints;
+        }
+        
         public SwingPoint GetLastSwingHigh()
         {
             return _swingDetector.GetLastSwingHigh();
@@ -111,6 +157,16 @@ namespace Zuva
         public SwingPoint GetLastSwingLow()
         {
             return _swingDetector.GetLastSwingLow();
+        }
+        
+        public SwingPoint GetLastHtfSwingHigh()
+        {
+            return _htfSwingDetector.GetLastSwingHigh();
+        }
+        
+        public SwingPoint GetLastHtfSwingLow()
+        {
+            return _htfSwingDetector.GetLastSwingLow();
         }
     }
 }

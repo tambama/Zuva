@@ -1,5 +1,3 @@
-using System;
-
 namespace Zuva.Models;
 
 public class Level
