@@ -14,7 +14,7 @@ public class SwingPoint
     public double Price { get; set; }
     public DateTime Time { get; set; }
     public Direction Direction { get; set; }
-    public Bar Bar { get; set; }
+    public Candle Bar { get; set; }
     public Direction CandleDirection { get; set; }
     public bool Swept { get; set; }
 
@@ -73,7 +73,7 @@ public class SwingPoint
     {
     }
 
-    public SwingPoint(int index, double price, DateTime time, Bar bar, SwingType swingType,
+    public SwingPoint(int index, double price, DateTime time, Candle bar, SwingType swingType,
         LiquidityType liquidityType = LiquidityType.Normal, Direction direction = Direction.Up,
         LiquidityName liquidityName = LiquidityName.AH)
     {

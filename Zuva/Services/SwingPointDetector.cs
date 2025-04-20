@@ -21,7 +21,7 @@ namespace Zuva.Services
         private readonly IndicatorDataSeries _swingLows;
         
         // Collection to store all swing points
-        private readonly List<SwingPoint> _swingPoints = new List<SwingPoint>();
+        private readonly List<SwingPoint> _swingPoints = new();
         
         // Reference to the last high and low swing points
         private SwingPoint _lastHighSwingPoint;
@@ -33,7 +33,7 @@ namespace Zuva.Services
             _swingLows = swingLows;
         }
         
-        public void ProcessBar(int index, Bar bar)
+        public void ProcessBar(int index, Candle bar)
         {
             // Need at least 1 bar to calculate
             if (index <= 0)
@@ -43,7 +43,7 @@ namespace Zuva.Services
             var open = bar.Open;
             var low = bar.Low;
             var high = bar.High;
-            var time = bar.OpenTime;
+            var time = bar.Time;
 
             bool isDownCandle = close < open;
             bool isUpCandle = close > open;
