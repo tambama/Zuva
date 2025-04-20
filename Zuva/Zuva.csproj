@@ -6,4 +6,8 @@
   <ItemGroup>
     <PackageReference Include="cTrader.Automate" Version="*" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Helpers\" />
+  </ItemGroup>
 </Project>

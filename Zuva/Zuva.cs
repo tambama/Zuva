@@ -2,7 +2,7 @@ using cAlgo.API;
 using Zuva.Services;
 using Zuva.Models;
 using System.Collections.Generic;
-using Zuva.Helpers;
+using Zuva.Extensions;
 
 namespace Zuva
 {
@@ -38,6 +38,7 @@ namespace Zuva
         private TimeFrame _highTimeFrame;
         
         private Bar _currentBar;
+        private int _currentBarIndex;
 
         protected override void Initialize()
         {
@@ -48,7 +49,7 @@ namespace Zuva
             _swingDetector = new SwingPointDetector(SwingHighs, SwingLows);
             _htfSwingDetector = new SwingPointDetector(HtfSwingHighs, HtfSwingLows);
 
-            _highTimeFrame = TimeframeHelper.GetTimeFrameFromString(HTF);
+            _highTimeFrame = HTF.GetTimeFrameFromString();
         }
 
         public override void Calculate(int index)
@@ -58,23 +59,39 @@ namespace Zuva
                 return;
 
             _currentBar = Bars[index - 1];
+            _currentBarIndex = index - 1;
 
-            // Pass the current bar properties
-            _swingDetector.ProcessBar(
-                index - 1,
-                new Candle(_currentBar, index - 1)
-            );
-                
-            // Update the relationships between swing points
-            if (index == Bars.Count - 1) // Only on the last bar for efficiency
+            if (ShowSwingPoints)
             {
-                _swingDetector.UpdateSwingPointRelationships();
-                _swingPoints = _swingDetector.GetAllSwingPoints();
+                // Pass the current bar properties
+                _swingDetector.ProcessBar(
+                    index - 1,
+                    new Candle(_currentBar, index - 1)
+                );
+                
+                // Update the relationships between swing points
+                if (index == Bars.Count - 1) // Only on the last bar for efficiency
+                {
+                    _swingDetector.UpdateSwingPointRelationships();
+                    _swingPoints = _swingDetector.GetAllSwingPoints();
+                }
             }
             
             // High Timeframe Processing
-            if (_currentBar != null && _currentBar.OpenTime.Minute == 00)
+            if (_currentBar.OpenTime.IsStartOfHigherTimeframeBar(_highTimeFrame))
             {
+                // Get the previous HTF bar indices
+                var (startIndex, endIndex) = Bars.GetPreviousHigherTimeframeBarRange(_currentBarIndex, HTF.GetTimeFrameFromString());
+
+                if (startIndex >= 0 && endIndex >= 0)
+                {
+                    // Now you can analyze the previous higher timeframe bar
+                    var (minTime, minIndex, min, maxTime, maxIndex, max) = Bars.GetMinMax(Bars[startIndex].OpenTime, Bars[endIndex].OpenTime);
+                    // Use these values in your trading strategy...
+                    
+                    Chart.DrawTrendLine($"{minTime}", minTime, min, _currentBar.OpenTime, min, Color.Pink);
+                    Chart.DrawTrendLine($"{maxTime}", maxTime, max, _currentBar.OpenTime, max, Color.Pink);
+                }
             }
         }
         

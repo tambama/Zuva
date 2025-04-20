@@ -8,13 +8,11 @@ public static class TimeExtensions
     /// <summary>
     /// Determines if the current bar is the start of a new higher timeframe bar
     /// </summary>
-    /// <param name="currentBar">The current bar to check</param>
+    /// <param name="barTime">The opening time for this bar</param>
     /// <param name="higherTimeframe">The higher timeframe to compare against</param>
     /// <returns>True if the current bar is the start of a new higher timeframe bar</returns>
-    public static bool IsStartOfHigherTimeframeBar(this Bar currentBar, TimeFrame higherTimeframe)
+    public static bool IsStartOfHigherTimeframeBar(this DateTime barTime, TimeFrame higherTimeframe)
     {
-        DateTime barTime = currentBar.OpenTime;
-    
         if (higherTimeframe == TimeFrame.Minute5)
         {
             return barTime.Minute % 5 == 0;
