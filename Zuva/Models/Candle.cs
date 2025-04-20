@@ -15,7 +15,7 @@ public class Candle
         Close = bar.Close;
     }
 
-    public int Index { get; set; }
+    public int? Index { get; set; }
     public DateTime Time { get; set; }
     public double Open { get; set; }
     public double High { get; set; }
@@ -26,4 +26,7 @@ public class Candle
     public bool IsHighTimeframe { get; set; }
     public int? IndexOfHigh { get; set; }
     public int? IndexOfLow { get; set; }
+    public DateTime? TimeOfHigh { get; set; }
+    public DateTime? TimeOfLow { get; set; }
+    public DateTime? TimeOfClose { get; set; }
 }
