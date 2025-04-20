@@ -86,11 +86,13 @@ namespace Zuva
                 if (startIndex >= 0 && endIndex >= 0)
                 {
                     // Now you can analyze the previous higher timeframe bar
-                    var (minTime, minIndex, min, maxTime, maxIndex, max) = Bars.GetMinMax(Bars[startIndex].OpenTime, Bars[endIndex].OpenTime);
+                    var candle = Bars.GetHigherTimeframeCandle(startIndex, endIndex);
                     // Use these values in your trading strategy...
                     
-                    Chart.DrawTrendLine($"{minTime}", minTime, min, _currentBar.OpenTime, min, Color.Pink);
-                    Chart.DrawTrendLine($"{maxTime}", maxTime, max, _currentBar.OpenTime, max, Color.Pink);
+                    Chart.DrawTrendLine($"{candle.TimeOfLow}", candle.TimeOfLow.Value, candle.Low, _currentBar.OpenTime, candle.Low, Color.Pink);
+                    Chart.DrawTrendLine($"{candle.TimeOfHigh}", candle.TimeOfHigh.Value, candle.High, _currentBar.OpenTime, candle.High, Color.Pink);
+                    
+                    // TODO: Implement HTF swing point detection.
                 }
             }
         }

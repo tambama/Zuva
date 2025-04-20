@@ -55,6 +55,7 @@ namespace Zuva.Extensions
 
             return (minTime, minIndex, min, maxTime, maxIndex, max);
         }
+        
         /// <summary>
         /// Gets the indices for the previous higher timeframe bar relative to the current bar
         /// </summary>
@@ -110,6 +111,68 @@ namespace Zuva.Extensions
             previousHigherTfEndIndex = Math.Min(previousHigherTfEndIndex, bars.Count - 1);
             
             return (previousHigherTfStartIndex, previousHigherTfEndIndex);
+        }
+        
+        /// <summary>
+        /// Creates a higher timeframe Candle object from a range of bars
+        /// </summary>
+        /// <param name="bars">The collection of bars</param>
+        /// <param name="startIndex">The starting index (inclusive)</param>
+        /// <param name="endIndex">The ending index (inclusive)</param>
+        /// <returns>A Candle object representing the higher timeframe candle</returns>
+        public static Candle GetHigherTimeframeCandle(this Bars bars, int startIndex, int endIndex)
+        {
+            // Validate indices
+            if (startIndex < 0 || endIndex < 0 || startIndex >= bars.Count || endIndex >= bars.Count || startIndex > endIndex)
+                return null;
+    
+            // Use the first bar's open and time
+            double open = bars[startIndex].Open;
+            DateTime time = bars[startIndex].OpenTime;
+    
+            // Initialize high and low values
+            double high = double.MinValue;
+            double low = double.MaxValue;
+            int indexOfHigh = -1;
+            int indexOfLow = -1;
+    
+            // Find the highest high and lowest low in the range
+            for (int i = startIndex; i <= endIndex; i++)
+            {
+                if (bars[i].High > high)
+                {
+                    high = bars[i].High;
+                    indexOfHigh = i;
+                }
+        
+                if (bars[i].Low < low)
+                {
+                    low = bars[i].Low;
+                    indexOfLow = i;
+                }
+            }
+    
+            // Use the last bar's close
+            double close = bars[endIndex].Close;
+    
+            // Create and return the HTF candle
+            var candle = new Candle(bars[startIndex], startIndex)
+            {
+                Open = open,
+                High = high,
+                Low = low,
+                Close = close,
+                Time = time,
+                // Mark this as a high timeframe candle
+                IsHighTimeframe = true,
+                // Store indices of price extremes for reference
+                IndexOfHigh = indexOfHigh,
+                IndexOfLow = indexOfLow,
+                TimeOfLow = bars[indexOfLow].OpenTime,
+                TimeOfHigh = bars[indexOfHigh].OpenTime
+            };
+    
+            return candle;
         }
     }
 }
