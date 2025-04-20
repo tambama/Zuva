@@ -4,7 +4,7 @@
   "success": true,
   "projectFilePath": "/Users/peniel/cAlgo/Sources/Indicators/Zuva/Zuva/Zuva.csproj",
   "expectedPackageFiles": [
-    "/Users/peniel/.nuget/packages/ctrader.automate/1.0.10/ctrader.automate.1.0.10.nupkg.sha512",
+    "/Users/peniel/.nuget/packages/ctrader.automate/1.0.12/ctrader.automate.1.0.12.nupkg.sha512",
     "/Users/peniel/.nuget/packages/microsoft.netcore.app.ref/6.0.33/microsoft.netcore.app.ref.6.0.33.nupkg.sha512",
     "/Users/peniel/.nuget/packages/microsoft.aspnetcore.app.ref/6.0.33/microsoft.aspnetcore.app.ref.6.0.33.nupkg.sha512"
   ],
