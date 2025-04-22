@@ -166,4 +166,14 @@ public static class ChartExtensions
             color);
     }
     
+    /// <summary>
+    /// Updates the market bias display on the chart
+    /// </summary>
+    public static void UpdateBias(this Chart chart, Direction bias)
+    {
+        string biasText = bias == Direction.Up ? "Bullish" : "Bearish";
+        Color biasColor = bias == Direction.Up ? Color.Green : Color.Red;
+        
+        chart.DrawText("CurrentBias", $"Bias: {biasText}", chart.Bars.OpenTimes[0], chart.Bars.HighPrices[0] + 0.0005, biasColor);
+    }
 }
