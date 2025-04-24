@@ -171,9 +171,8 @@ public static class ChartExtensions
     /// </summary>
     public static void UpdateBias(this Chart chart, Direction bias)
     {
-        string biasText = bias == Direction.Up ? "Bullish" : "Bearish";
-        Color biasColor = bias == Direction.Up ? Color.Green : Color.Red;
-        
-        chart.DrawText("CurrentBias", $"Bias: {biasText}", chart.Bars.OpenTimes[0], chart.Bars.HighPrices[0] + 0.0005, biasColor);
+        chart.RemoveObject("bias");
+        var text = bias == Direction.Down ? "Bearish" : "Bullish";
+        chart.DrawStaticText("bias", text, VerticalAlignment.Bottom, HorizontalAlignment.Left, Color.Wheat);
     }
 }

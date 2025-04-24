@@ -4,6 +4,7 @@ using Zuva.Models;
 using System.Collections.Generic;
 using Zuva.Extensions;
 using System;
+using Mwenje.Extensions;
 
 namespace Zuva
 {
@@ -19,10 +20,13 @@ namespace Zuva
         [Parameter("HTF", DefaultValue = "H1")]
         public string HTF { get; set; }
 
-        [Output("Swing High", Color = Colors.White, PlotType = PlotType.Points, Thickness = 4)]
+        [Parameter("Show Market Structure", DefaultValue = true)]
+        public bool ShowMarketStructure { get; set; }
+
+        [Output("Swing High", Color = Colors.White, PlotType = PlotType.Points, Thickness = 1)]
         public IndicatorDataSeries SwingHighs { get; set; }
 
-        [Output("Swing Low", Color = Colors.White, PlotType = PlotType.Points, Thickness = 4)]
+        [Output("Swing Low", Color = Colors.White, PlotType = PlotType.Points, Thickness = 1)]
         public IndicatorDataSeries SwingLows { get; set; }
         
         [Output("HTF Swing High", Color = Colors.Green, PlotType = PlotType.Points, Thickness = 8)]
@@ -30,6 +34,19 @@ namespace Zuva
         
         [Output("HTF Swing Low", Color = Colors.Red, PlotType = PlotType.Points, Thickness = 8)]
         public IndicatorDataSeries HtfSwingLows { get; set; }
+
+        // Market Structure Series
+        [Output("Higher High", Color = Colors.Green, PlotType = PlotType.Points, Thickness = 4)]
+        public IndicatorDataSeries HigherHighs { get; set; }
+        
+        [Output("Lower High", Color = Colors.Red, PlotType = PlotType.Points, Thickness = 4)]
+        public IndicatorDataSeries LowerHighs { get; set; }
+        
+        [Output("Higher Low", Color = Colors.Green, PlotType = PlotType.Points, Thickness = 4)]
+        public IndicatorDataSeries HigherLows { get; set; }
+        
+        [Output("Lower Low", Color = Colors.Red, PlotType = PlotType.Points, Thickness = 4)]
+        public IndicatorDataSeries LowerLows { get; set; }
 
         private SwingPointDetector _swingDetector;
         private List<SwingPoint> _swingPoints;
@@ -44,6 +61,9 @@ namespace Zuva
         private Bar _currentBar;
         private int _currentBarIndex;
 
+        // Market structure analyzer
+        private MarketStructureAnalyzer _marketStructureAnalyzer;
+
         protected override void Initialize()
         {
             // Initialize the swing detector
@@ -54,6 +74,20 @@ namespace Zuva
             _htfSwingDetector = new SwingPointDetector(HtfSwingHighs, HtfSwingLows);
 
             _highTimeFrame = HTF.GetTimeFrameFromString();
+            
+            // Initialize market structure analyzer if enabled
+            if (ShowMarketStructure)
+            {
+                _marketStructureAnalyzer = new MarketStructureAnalyzer(
+                    Chart,
+                    SwingHighs,
+                    SwingLows,
+                    HigherHighs,
+                    LowerHighs,
+                    LowerLows,
+                    HigherLows
+                );
+            }
         }
 
         public override void Calculate(int index)
@@ -65,13 +99,39 @@ namespace Zuva
             _currentBar = Bars[index - 1];
             _currentBarIndex = index - 1;
 
+            if (_currentBar.OpenTime.Date != DateTime.Today)
+            {
+                return;
+            }
+
             if (ShowSwingPoints)
             {
+                // Create a new candle object from the current bar
+                var candle = new Candle(_currentBar, index - 1);
+                
                 // Pass the current bar properties to the regular swing detector
-                _swingDetector.ProcessBar(
-                    index - 1,
-                    new Candle(_currentBar, index - 1)
-                );
+                _swingDetector.ProcessBar(index - 1, candle);
+                
+                // Process market structure if enabled
+                if (ShowMarketStructure && _marketStructureAnalyzer != null)
+                {
+                    // Check if a swing point was identified at this index
+                    SwingPoint swingPoint = _swingDetector.GetSwingPointAtIndex(index - 1);
+                    
+                    if (swingPoint != null)
+                    {
+                        // If this is the first swing point, initialize the market structure analyzer
+                        if (index == 2)
+                        {
+                            _marketStructureAnalyzer.Initialize(_swingDetector.GetAllSwingPoints());
+                        }
+                        else
+                        {
+                            // Process the new swing point for market structure analysis
+                            _marketStructureAnalyzer.ProcessSwingPoint(swingPoint);
+                        }
+                    }
+                }
                 
                 // Update the relationships between swing points
                 if (index == Bars.Count - 1) // Only on the last bar for efficiency
@@ -167,6 +227,17 @@ namespace Zuva
         public SwingPoint GetLastHtfSwingLow()
         {
             return _htfSwingDetector.GetLastSwingLow();
+        }
+        
+        // Get market structure information
+        public Direction GetMarketBias()
+        {
+            return ShowMarketStructure ? _marketStructureAnalyzer.GetBias() : Direction.Up;
+        }
+        
+        public List<SwingPoint> GetExternalLiquidityPoints()
+        {
+            return ShowMarketStructure ? _marketStructureAnalyzer.GetExternalLiquidityPoints() : new List<SwingPoint>();
         }
     }
 }
