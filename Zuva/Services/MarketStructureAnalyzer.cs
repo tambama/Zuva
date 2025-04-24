@@ -44,6 +44,9 @@ namespace Zuva.Services
         
         // Reference to all swing points
         private List<SwingPoint> _swingPoints = new List<SwingPoint>();
+        
+        // Flag to track if we're properly initialized
+        private bool _isInitialized = false;
 
         public MarketStructureAnalyzer(
             Chart chart,
@@ -68,7 +71,7 @@ namespace Zuva.Services
         /// </summary>
         public void Initialize(List<SwingPoint> swingPoints)
         {
-            if (swingPoints == null || swingPoints.Count < 1)
+            if (swingPoints == null || swingPoints.Count < 2)
                 return;
             
             _swingPoints = swingPoints;
@@ -82,15 +85,20 @@ namespace Zuva.Services
                 .OrderByDescending(s => s.Index)
                 .ToList();
             
-            // Set initial BOS points
-            if (_orderedHighs.Count > 0)
-                _highBOS = _orderedHighs[0];
+            // Only proceed if we have at least one high and one low
+            if (_orderedHighs.Count == 0 || _orderedLows.Count == 0)
+                return;
                 
-            if (_orderedLows.Count > 0)
-                _lowBOS = _orderedLows[0];
+            // Set initial BOS points
+            _highBOS = _orderedHighs[0];
+            _chart.DrawIcon($"{_highBOS.Time}", ChartIconType.Circle, _highBOS.Time, _highBOS.Price, Color.Pink);
+            _lowBOS = _orderedLows[0];
+            _chart.DrawIcon($"{_lowBOS.Time}", ChartIconType.Circle, _lowBOS.Time, _lowBOS.Price, Color.Pink);
                 
             // Determine initial bias based on the relative positions of the latest highs and lows
             DetermineInitialBias();
+            
+            _isInitialized = true;
         }
 
         /// <summary>
@@ -98,29 +106,35 @@ namespace Zuva.Services
         /// </summary>
         private void DetermineInitialBias()
         {
-            if (_orderedHighs.Count < 2 || _orderedLows.Count < 2)
-                return;
+            // If we have at least 2 highs and 2 lows, we can determine the bias based on their patterns
+            if (_orderedHighs.Count >= 2 && _orderedLows.Count >= 2)
+            {
+                var latestHigh = _orderedHighs[0];
+                var prevHigh = _orderedHighs[1];
+                var latestLow = _orderedLows[0];
+                var prevLow = _orderedLows[1];
                 
-            var latestHigh = _orderedHighs[0];
-            var prevHigh = _orderedHighs[1];
-            var latestLow = _orderedLows[0];
-            var prevLow = _orderedLows[1];
-            
-            bool higherHigh = latestHigh.Price > prevHigh.Price;
-            bool higherLow = latestLow.Price > prevLow.Price;
-            
-            // Uptrend: Higher Highs and Higher Lows
-            if (higherHigh && higherLow)
-            {
-                _bias = Direction.Up;
+                bool higherHigh = latestHigh.Price > prevHigh.Price;
+                bool higherLow = latestLow.Price > prevLow.Price;
+                
+                // Uptrend: Higher Highs and Higher Lows
+                if (higherHigh && higherLow)
+                {
+                    _bias = Direction.Up;
+                }
+                // Downtrend: Lower Highs and Lower Lows
+                else if (!higherHigh && !higherLow)
+                {
+                    _bias = Direction.Down;
+                }
+                // Mixed signals - use the latest swing point direction
+                else
+                {
+                    _bias = latestHigh.Index > latestLow.Index ? Direction.Up : Direction.Down;
+                }
             }
-            // Downtrend: Lower Highs and Lower Lows
-            else if (!higherHigh && !higherLow)
-            {
-                _bias = Direction.Down;
-            }
-            // Mixed signals - use the latest swing point direction
-            else
+            // If we don't have enough swing points, we can use the most recent swing point
+            else if (_swingPoints.Count > 0)
             {
                 var latestPoint = _swingPoints.OrderByDescending(s => s.Index).FirstOrDefault();
                 if (latestPoint != null)
@@ -129,6 +143,7 @@ namespace Zuva.Services
                 }
             }
             
+            // Always update the bias on the chart regardless of how we determined it
             UpdateBiasOnChart();
         }
 
@@ -137,24 +152,52 @@ namespace Zuva.Services
         /// </summary>
         public void ProcessSwingPoint(SwingPoint swingPoint)
         {
+            // Skip if we haven't been properly initialized
+            if (!_isInitialized || swingPoint == null || _highBOS == null || _lowBOS == null)
+                return;
+            
+            // Update ordered lists
+            if (swingPoint.SwingType == SwingType.H)
+            {
+                _orderedHighs.Insert(0, swingPoint);
+            }
+            else
+            {
+                _orderedLows.Insert(0, swingPoint);
+            }
+                
             if (swingPoint.Direction == Direction.Up)
             {
-                if (swingPoint.Price > _highBOS.Price)
+                // Compare with _highBOS only if it exists
+                if (_highBOS != null && swingPoint.Price > _highBOS.Price)
                 {
                     _highBOS = swingPoint;
-                    _lowCHOCH = _lowBOS;
-                    _lows[_lowBOS.Index] = _lowBOS.Price;
                     
-                    var low = _orderedLows.First(p => p.Index == _lowBOS.Index);
-                    low.SwingType = SwingType.LL;
-                    var liquidity = _externalLiquidity.Any(l => l.Index == _lowBOS.Index);
-                    if (!liquidity)
+                    // Only set _lowCHOCH if _lowBOS exists
+                    if (_lowBOS != null)
                     {
-                        _externalLiquidity.Add(low);
+                        _lowCHOCH = _lowBOS;
+                        
+                        // Only try to mark the low in the series if we have a valid index
+                        if (_lowBOS.Index >= 0 && _lowBOS.Index < _lows.Count)
+                        {
+                            _lows[_lowBOS.Index] = _lowBOS.Price;
+                            
+                            // Find the low in ordered lows and check if it exists before manipulating
+                            var low = _orderedLows.FirstOrDefault(p => p.Index == _lowBOS.Index);
+                            if (low != null)
+                            {
+                                low.SwingType = SwingType.LL;
+                                var liquidity = _externalLiquidity.Any(l => l.Index == _lowBOS.Index);
+                                if (!liquidity)
+                                {
+                                    _externalLiquidity.Add(low);
+                                }
+                            }
+                        }
                     }
-                    
 
-                    if (_bias == Direction.Up)
+                    if (_bias == Direction.Up && _orderedLows.Count > 0)
                     {
                         _highIND = _orderedLows[0];
                     }
@@ -169,214 +212,33 @@ namespace Zuva.Services
                 // Mark Low point after taking out inducement in a downtrend
                 if (_bias == Direction.Down && _lowIND != null && swingPoint.Bar.Close > _lowIND.Price)
                 {
-                    var point = _swingPoints.FirstOrDefault(s => s.Index == _lowBOS.Index);
-                    point.SwingType = SwingType.LL;
-                    _lows[point.Index] = point.Price;
-                    
-                    var liquidity = _externalLiquidity.Any(l => l.Index == point.Index);
-                    if (!liquidity)
+                    if (_lowBOS != null)
                     {
-                        _externalLiquidity.Add(point);
-                    }
-                    
-                    _highIND = null;
-                    _highBOS = swingPoint;
-                    
-                    // TODO: Draw 
-                    _lowIND = null;
-                }
-
-                // Change of Character
-                if (_highCHOCH != null && swingPoint.Price > _highCHOCH.Price)
-                {
-                    var point = _swingPoints.FirstOrDefault(s => s.Index == _highCHOCH.Index);
-                    point.Swept = true;
-                    _highBOS = swingPoint;
-                    _highIND = _orderedLows[0];
-                    _highCHOCH = null;
-                    _bias = Direction.Up;
-                    _lows[_lowCHOCH.Index] = _lowCHOCH.Price;
-                    
-                    var low = _swingPoints.FirstOrDefault(s => s.Index == _lowCHOCH.Index);
-                    if (low != null)
-                    {
-                        low.SwingType = SwingType.LL;
-                    }
-                    
-                    var liquidity = _externalLiquidity.Any(l => l.Index == _lowCHOCH.Index);
-                    if (!liquidity)
-                    {
-                        _externalLiquidity.Add(low);
-                    }
-                    // Mark CHoCH
-                }
-            }
-            else
-            {
-                if (swingPoint.Price < _lowBOS.Price)
-                {
-                    _lowBOS = swingPoint;
-                    _highCHOCH = _highBOS;
-                    _highs[_highBOS.Index] = _highBOS.Price;
-                    
-                    var high = _orderedHighs.First(p => p.Index == _highBOS.Index);
-                    high.SwingType = SwingType.HH;
-                    
-                    var liquidity = _externalLiquidity.Any(l => l.Index == _lowBOS.Index);
-                    if (!liquidity)
-                    {
-                        _externalLiquidity.Add(high);
-                    }
-
-                    if (_bias == Direction.Down)
-                    {
-                        _lowIND = _orderedHighs[0];
-                    }
-                    
-                    var point = _swingPoints.FirstOrDefault(s => s.Index == _lowBOS.Index);
-                    if (point != null)
-                    {
-                        point.Swept = true;
-                    }
-                }
-                
-                // Mark High point after taking out inducement in a downtrend
-                if (_bias == Direction.Up && _highIND != null && swingPoint.Bar.Close < _highIND.Price)
-                {
-                    var point = _swingPoints.FirstOrDefault(s => s.Index == _highBOS.Index);
-                    point.SwingType = SwingType.HH;
-                    _highs[point.Index] = point.Price;
-                    
-                    var liquidity = _externalLiquidity.Any(l => l.Index == point.Index);
-                    if (!liquidity)
-                    {
-                        _externalLiquidity.Add(point);
-                    }
-                    
-                    _lowIND = null;
-                    _lowBOS = swingPoint;
-                    
-                    // TODO: Draw
-                    _highIND = null;
-                }
-                
-                // Change of Character
-                if (_lowCHOCH != null && swingPoint.Price < _lowCHOCH.Price)
-                {
-                    var point = _swingPoints.FirstOrDefault(s => s.Index == _lowCHOCH.Index);
-                    point.Swept = true;
-                    _lowBOS = swingPoint;
-                    _lowIND = _orderedHighs[0];
-                    _lowCHOCH = null;
-                    _bias = Direction.Down;
-                    _highs[_highBOS.Index] = _highBOS.Price;
-                    
-                    var high = _swingPoints.FirstOrDefault(s => s.Index == _highBOS.Index);
-                    if (high != null) high.SwingType = SwingType.HH;
-                    
-                    var liquidity = _externalLiquidity.Any(l => l.Index == _highBOS.Index);
-                    if (!liquidity)
-                    {
-                        _externalLiquidity.Add(_highBOS);
-                    }
-                    
-                    // Mark Fibs
-                }
-            }
-            
-            //Chart.UpdateBias(_bias);
-        }
-
-        /// <summary>
-        /// Checks for Break of Structure (BOS) and Change of Character (CHoCH) conditions
-        /// </summary>
-        private void CheckForBOS(SwingPoint swingPoint)
-        {
-            if (swingPoint.Direction == Direction.Up)
-            {
-                // Break of Structure - Taking out a previous high
-                if (_highBOS != null && swingPoint.Price > _highBOS.Price)
-                {
-                    _highBOS = swingPoint;
-                    _lowCHOCH = _lowBOS; // Mark potential CHoCH point
-                    
-                    // Mark previous low point as significant
-                    // No need to clear previous markings - we want to maintain history
-                    _lows[_lowBOS.Index] = _lowBOS.Price;
-                    
-                    var low = _orderedLows.FirstOrDefault(p => p.Index == _lowBOS.Index);
-                    if (low != null)
-                    {
-                        low.SwingType = SwingType.LL;
-                        _lls[_lowBOS.Index] = _lowBOS.Price; // Mark as Lower Low
-                        
-                        // Add to external liquidity if not already there
-                        var liquidity = _externalLiquidity.Any(l => l.Index == _lowBOS.Index);
-                        if (!liquidity)
+                        var point = _swingPoints.FirstOrDefault(s => s.Index == _lowBOS.Index);
+                        if (point != null)
                         {
-                            _externalLiquidity.Add(low);
-                        }
-                    }
-
-                    // Set inducement in an uptrend
-                    if (_bias == Direction.Up && _orderedLows.Count > 0)
-                    {
-                        _highIND = _orderedLows[0];
-                    }
-                    
-                    // Mark the previous BOS point as swept
-                    var point = _swingPoints.FirstOrDefault(s => s.Index == _highBOS.Index);
-                    if (point != null)
-                    {
-                        point.Swept = true;
-                    }
-                    
-                    // Draw BOS line on chart
-                    if (_highBOS != null && _lowBOS != null)
-                    {
-                        _chart.DrawTrendLine($"BOS-{swingPoint.Time.Ticks}", _highBOS, _lowBOS, LineType.BOS);
-                    }
-                }
-                
-                // Inducement taken out in a downtrend
-                if (_bias == Direction.Down && _lowIND != null && swingPoint.Bar.Close > _lowIND.Price)
-                {
-                    var point = _swingPoints.FirstOrDefault(s => s.Index == _lowBOS.Index);
-                    if (point != null)
-                    {
-                        // No need to clear previous markings - we want to maintain history
-                        point.SwingType = SwingType.LL;
-                        _lows[point.Index] = point.Price;
-                        _lls[point.Index] = point.Price; // Mark as Lower Low
-                        
-                        var liquidity = _externalLiquidity.Any(l => l.Index == point.Index);
-                        if (!liquidity)
-                        {
-                            _externalLiquidity.Add(point);
+                            point.SwingType = SwingType.LL;
+                            
+                            // Only try to mark the low in the series if we have a valid index
+                            if (point.Index >= 0 && point.Index < _lows.Count)
+                            {
+                                _lows[point.Index] = point.Price;
+                            }
+                            
+                            var liquidity = _externalLiquidity.Any(l => l.Index == point.Index);
+                            if (!liquidity)
+                            {
+                                _externalLiquidity.Add(point);
+                            }
                         }
                     }
                     
                     _highIND = null;
                     _highBOS = swingPoint;
                     _lowIND = null;
-                    
-                    // Draw inducement line
-                    _chart.DrawStraightLine(
-                        $"IND-{swingPoint.Time.Ticks}",
-                        _lowIND.Time, 
-                        _lowIND.Price,
-                        swingPoint.Time,
-                        _lowIND.Price,
-                        "IND",
-                        LineStyle.Dots,
-                        null,
-                        true,
-                        true,
-                        false
-                    );
                 }
 
-                // Change of Character - Taking out a CHoCH point
+                // Change of Character
                 if (_highCHOCH != null && swingPoint.Price > _highCHOCH.Price)
                 {
                     var point = _swingPoints.FirstOrDefault(s => s.Index == _highCHOCH.Index);
@@ -395,11 +257,9 @@ namespace Zuva.Services
                     _highCHOCH = null;
                     _bias = Direction.Up;
                     
-                    if (_lowCHOCH != null)
+                    if (_lowCHOCH != null && _lowCHOCH.Index >= 0 && _lowCHOCH.Index < _lows.Count)
                     {
-                        // No need to clear previous markings - we want to maintain history
                         _lows[_lowCHOCH.Index] = _lowCHOCH.Price;
-                        _lls[_lowCHOCH.Index] = _lowCHOCH.Price; // Mark as Lower Low
                         
                         var low = _swingPoints.FirstOrDefault(s => s.Index == _lowCHOCH.Index);
                         if (low != null)
@@ -413,108 +273,82 @@ namespace Zuva.Services
                             }
                         }
                     }
-                    
-                    // Draw CHoCH line
-                    _chart.DrawStraightLine(
-                        $"CHOCH-{swingPoint.Time.Ticks}",
-                        _lowCHOCH.Time,
-                        _lowCHOCH.Price,
-                        swingPoint.Time,
-                        swingPoint.Price,
-                        "CHoCH",
-                        LineStyle.Solid,
-                        Color.Red,
-                        true,
-                        true,
-                        false
-                    );
                 }
             }
-            else
+            else // Direction.Down
             {
-                // Break of Structure - Taking out a previous low
+                // Compare with _lowBOS only if it exists
                 if (_lowBOS != null && swingPoint.Price < _lowBOS.Price)
                 {
                     _lowBOS = swingPoint;
-                    _highCHOCH = _highBOS; // Mark potential CHoCH point
                     
-                    // Mark previous high point as significant
-                    // No need to clear previous markings - we want to maintain history
-                    _highs[_highBOS.Index] = _highBOS.Price;
-                    
-                    var high = _orderedHighs.FirstOrDefault(p => p.Index == _highBOS.Index);
-                    if (high != null)
+                    // Only set _highCHOCH if _highBOS exists
+                    if (_highBOS != null)
                     {
-                        high.SwingType = SwingType.HH;
-                        _hhs[_highBOS.Index] = _highBOS.Price; // Mark as Higher High
+                        _highCHOCH = _highBOS;
                         
-                        // Add to external liquidity if not already there
-                        var liquidity = _externalLiquidity.Any(l => l.Index == _highBOS.Index);
-                        if (!liquidity)
+                        // Only try to mark the high in the series if we have a valid index
+                        if (_highBOS.Index >= 0 && _highBOS.Index < _highs.Count)
                         {
-                            _externalLiquidity.Add(high);
+                            _highs[_highBOS.Index] = _highBOS.Price;
+                            
+                            // Find the high in ordered highs and check if it exists before manipulating
+                            var high = _orderedHighs.FirstOrDefault(p => p.Index == _highBOS.Index);
+                            if (high != null)
+                            {
+                                high.SwingType = SwingType.HH;
+                                
+                                var liquidity = _externalLiquidity.Any(l => l.Index == _highBOS.Index);
+                                if (!liquidity)
+                                {
+                                    _externalLiquidity.Add(high);
+                                }
+                            }
                         }
                     }
 
-                    // Set inducement in a downtrend
                     if (_bias == Direction.Down && _orderedHighs.Count > 0)
                     {
                         _lowIND = _orderedHighs[0];
                     }
                     
-                    // Mark the previous BOS point as swept
                     var point = _swingPoints.FirstOrDefault(s => s.Index == _lowBOS.Index);
                     if (point != null)
                     {
                         point.Swept = true;
                     }
-                    
-                    // Draw BOS line on chart
-                    if (_highBOS != null && _lowBOS != null)
-                    {
-                        _chart.DrawTrendLine($"BOS-{swingPoint.Time.Ticks}", _highBOS, _lowBOS, LineType.BOS);
-                    }
                 }
                 
-                // Inducement taken out in an uptrend
+                // Mark High point after taking out inducement in an uptrend
                 if (_bias == Direction.Up && _highIND != null && swingPoint.Bar.Close < _highIND.Price)
                 {
-                    var point = _swingPoints.FirstOrDefault(s => s.Index == _highBOS.Index);
-                    if (point != null)
+                    if (_highBOS != null)
                     {
-                        // No need to clear previous markings - we want to maintain history
-                        point.SwingType = SwingType.HH;
-                        _highs[point.Index] = point.Price;
-                        _hhs[point.Index] = point.Price; // Mark as Higher High
-                        
-                        var liquidity = _externalLiquidity.Any(l => l.Index == point.Index);
-                        if (!liquidity)
+                        var point = _swingPoints.FirstOrDefault(s => s.Index == _highBOS.Index);
+                        if (point != null)
                         {
-                            _externalLiquidity.Add(point);
+                            point.SwingType = SwingType.HH;
+                            
+                            // Only try to mark the high in the series if we have a valid index
+                            if (point.Index >= 0 && point.Index < _highs.Count)
+                            {
+                                _highs[point.Index] = point.Price;
+                            }
+                            
+                            var liquidity = _externalLiquidity.Any(l => l.Index == point.Index);
+                            if (!liquidity)
+                            {
+                                _externalLiquidity.Add(point);
+                            }
                         }
                     }
                     
                     _lowIND = null;
                     _lowBOS = swingPoint;
                     _highIND = null;
-                    
-                    // Draw inducement line
-                    _chart.DrawStraightLine(
-                        $"IND-{swingPoint.Time.Ticks}",
-                        _highIND.Time, 
-                        _highIND.Price,
-                        swingPoint.Time,
-                        _highIND.Price,
-                        "IND",
-                        LineStyle.Dots,
-                        null,
-                        true,
-                        true,
-                        false
-                    );
                 }
                 
-                // Change of Character - Taking out a CHoCH point
+                // Change of Character
                 if (_lowCHOCH != null && swingPoint.Price < _lowCHOCH.Price)
                 {
                     var point = _swingPoints.FirstOrDefault(s => s.Index == _lowCHOCH.Index);
@@ -533,38 +367,26 @@ namespace Zuva.Services
                     _lowCHOCH = null;
                     _bias = Direction.Down;
                     
-                    // No need to clear previous markings - we want to maintain history
-                    _highs[_highBOS.Index] = _highBOS.Price;
-                    _hhs[_highBOS.Index] = _highBOS.Price; // Mark as Higher High
-                    
-                    var high = _swingPoints.FirstOrDefault(s => s.Index == _highBOS.Index);
-                    if (high != null)
+                    if (_highBOS != null && _highBOS.Index >= 0 && _highBOS.Index < _highs.Count)
                     {
-                        high.SwingType = SwingType.HH;
+                        _highs[_highBOS.Index] = _highBOS.Price;
                         
-                        var liquidity = _externalLiquidity.Any(l => l.Index == _highBOS.Index);
-                        if (!liquidity && _highBOS != null)
+                        var high = _swingPoints.FirstOrDefault(s => s.Index == _highBOS.Index);
+                        if (high != null)
                         {
-                            _externalLiquidity.Add(_highBOS);
+                            high.SwingType = SwingType.HH;
+                            
+                            var liquidity = _externalLiquidity.Any(l => l.Index == _highBOS.Index);
+                            if (!liquidity && _highBOS != null)
+                            {
+                                _externalLiquidity.Add(_highBOS);
+                            }
                         }
                     }
-                    
-                    // Draw CHoCH line
-                    _chart.DrawStraightLine(
-                        $"CHOCH-{swingPoint.Time.Ticks}",
-                        _highCHOCH.Time,
-                        _highCHOCH.Price,
-                        swingPoint.Time,
-                        swingPoint.Price,
-                        "CHoCH",
-                        LineStyle.Solid,
-                        Color.Red,
-                        true,
-                        true,
-                        false
-                    );
                 }
             }
+            
+            UpdateBiasOnChart();
         }
 
         /// <summary>
@@ -572,7 +394,17 @@ namespace Zuva.Services
         /// </summary>
         private void UpdateBiasOnChart()
         {
-            _chart.UpdateBias(_bias);
+            try
+            {
+                if (_chart != null)
+                {
+                    _chart.UpdateBias(_bias);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Cannot use Print - must be handled externally
+            }
         }
 
         /// <summary>
