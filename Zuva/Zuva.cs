@@ -28,6 +28,9 @@ namespace Zuva
 
         [Parameter("Show CHOCH", Group = "Market Structure", DefaultValue = true)]
         public bool ShowChoch { get; set; }
+        
+        [Parameter("Show Order Flow", Group = "Order Flow", DefaultValue = false)]
+        public bool ShowOrderFlow { get; set; }
 
         [Output("Swing High", Color = Colors.White, PlotType = PlotType.Points, Thickness = 1)]
         public IndicatorDataSeries SwingHighs { get; set; }
@@ -70,8 +73,14 @@ namespace Zuva
         // Market structure analyzer
         private MarketStructureAnalyzer _marketStructureAnalyzer;
         
+        // PD Array analyzer
+        private PdArrayAnalyzer _pdArrayAnalyzer;
+        
         // Flag to track if we have enough data for market structure analysis
         private bool _marketStructureInitialized = false;
+        
+        // Flag to track if PD Array analyzer is initialized
+        private bool _pdArrayAnalyzerInitialized = false;
 
         protected override void Initialize()
         {
@@ -83,6 +92,18 @@ namespace Zuva
             _htfSwingDetector = new SwingPointDetector(HtfSwingHighs, HtfSwingLows);
 
             _highTimeFrame = HTF.GetTimeFrameFromString();
+            
+            // Initialize PD Array analyzer
+            try
+            {
+                _pdArrayAnalyzer = new PdArrayAnalyzer(Chart, ShowOrderFlow);
+            }
+            catch (Exception ex)
+            {
+                Print("Error initializing PD Array Analyzer: " + ex.Message);
+                // Disable to prevent further errors
+                ShowOrderFlow = false;
+            }
             
             // Initialize market structure analyzer if enabled
             try
@@ -101,7 +122,9 @@ namespace Zuva
             }
             catch (Exception ex)
             {
-                ShowMarketStructure = false; // Disable to prevent further errors
+                Print("Error initializing Market Structure Analyzer: " + ex.Message);
+                // Disable to prevent further errors
+                ShowMarketStructure = false;
             }
         }
 
@@ -114,13 +137,6 @@ namespace Zuva
             _currentBar = Bars[index - 1];
             _currentBarIndex = index - 1;
 
-            // Skip calculations for historical data
-            // You can remove this check if you want to process all historical data
-            if (_currentBar.OpenTime.Date != DateTime.Today)
-            {
-                //return;
-            }
-
             if (ShowSwingPoints)
             {
                 try
@@ -131,18 +147,18 @@ namespace Zuva
                     // Pass the current bar properties to the regular swing detector
                     _swingDetector.ProcessBar(index - 1, candle);
                     
-                    // Process market structure if enabled
-                    if (ShowMarketStructure && _marketStructureAnalyzer != null)
+                    // Get any newly identified swing point
+                    SwingPoint swingPoint = _swingDetector.GetSwingPointAtIndex(index - 1);
+                    
+                    if (swingPoint != null)
                     {
-                        // Check if a swing point was identified at this index
-                        SwingPoint swingPoint = _swingDetector.GetSwingPointAtIndex(index - 1);
-                        
-                        if (swingPoint != null)
+                        // Process for market structure if enabled
+                        if (ShowMarketStructure && _marketStructureAnalyzer != null)
                         {
                             // If we have enough swing points, initialize the market structure analyzer
                             var allSwingPoints = _swingDetector.GetAllSwingPoints();
                             
-                            if (!_marketStructureInitialized && allSwingPoints.Count == 2)
+                            if (!_marketStructureInitialized && allSwingPoints.Count >= 2)
                             {
                                 _marketStructureAnalyzer.Initialize(allSwingPoints);
                                 _marketStructureInitialized = true;
@@ -151,6 +167,24 @@ namespace Zuva
                             {
                                 // Process the new swing point for market structure analysis
                                 _marketStructureAnalyzer.ProcessSwingPoint(swingPoint);
+                            }
+                        }
+                        
+                        // Process for PD Array analysis
+                        if (_pdArrayAnalyzer != null)
+                        {
+                            // If we have enough swing points, initialize the PD Array analyzer
+                            var allSwingPoints = _swingDetector.GetAllSwingPoints();
+                            
+                            if (!_pdArrayAnalyzerInitialized && allSwingPoints.Count >= 2)
+                            {
+                                _pdArrayAnalyzer.Initialize(allSwingPoints);
+                                _pdArrayAnalyzerInitialized = true;
+                            }
+                            else if (_pdArrayAnalyzerInitialized)
+                            {
+                                // Process the new swing point for PD Array analysis
+                                _pdArrayAnalyzer.ProcessSwingPoint(swingPoint);
                             }
                         }
                     }
@@ -164,8 +198,7 @@ namespace Zuva
                 }
                 catch (Exception ex)
                 {
-                    // Log the exception for debugging
-                    // Cannot use Print directly in MarketStructureAnalyzer
+                    Print("Error in swing point processing: " + ex.Message);
                 }
             }
             
@@ -202,8 +235,7 @@ namespace Zuva
                 }
                 catch (Exception ex)
                 {
-                    // Log the exception for debugging
-                    // Cannot use Print directly in MarketStructureAnalyzer
+                    Print("Error in HTF processing: " + ex.Message);
                 }
             }
         }
@@ -250,6 +282,32 @@ namespace Zuva
         {
             return (ShowMarketStructure && _marketStructureAnalyzer != null) ? 
                 _marketStructureAnalyzer.GetExternalLiquidityPoints() : new List<SwingPoint>();
+        }
+        
+        // Get order flow information
+        public List<Level> GetPdArrays()
+        {
+            return _pdArrayAnalyzer?.GetPdArrays() ?? new List<Level>();
+        }
+        
+        public List<Level> GetBullishPdArrays()
+        {
+            return _pdArrayAnalyzer?.GetBullishPdArrays() ?? new List<Level>();
+        }
+        
+        public List<Level> GetBearishPdArrays()
+        {
+            return _pdArrayAnalyzer?.GetBearishPdArrays() ?? new List<Level>();
+        }
+        
+        public Level GetLastBullishPdArray()
+        {
+            return _pdArrayAnalyzer?.GetLastBullishPdArray();
+        }
+        
+        public Level GetLastBearishPdArray()
+        {
+            return _pdArrayAnalyzer?.GetLastBearishPdArray();
         }
     }
 }
