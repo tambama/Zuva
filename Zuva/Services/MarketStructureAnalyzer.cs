@@ -21,6 +21,9 @@ namespace Zuva.Services
         private readonly IndicatorDataSeries _hls; // Higher Lows
         private readonly bool _showStructure;
         private readonly bool _showChoch;
+        
+        // Add a delegate for logging
+        private readonly Action<string> _logger;
 
         // Market structure state
         private Direction _bias = Direction.Up; // Current market bias
@@ -63,7 +66,8 @@ namespace Zuva.Services
             IndicatorDataSeries lls,
             IndicatorDataSeries hls,
             bool showStructure,
-            bool showChoch)
+            bool showChoch,
+            Action<string> logger = null)
         {
             _chart = chart;
             _highs = highs;
@@ -74,6 +78,7 @@ namespace Zuva.Services
             _hls = hls;
             _showStructure = showStructure;
             _showChoch = showChoch;
+            _logger = logger ?? (_ => { });
         }
 
         /// <summary>

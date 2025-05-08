@@ -120,7 +120,8 @@ namespace Zuva
                     LowerLows,
                     HigherLows,
                     ShowStructure,
-                    ShowChoch
+                    ShowChoch,
+                    message => Print(message) // Pass Print method as logger
                 );
             }
             catch (Exception ex)
@@ -156,26 +157,6 @@ namespace Zuva
                     var swingPointsAtIndex = _swingDetector.GetSwingPointsAtIndex(_previousBarIndex);
                     if (swingPointsAtIndex.Count > 0)
                     {
-                        // Sort based on candle direction
-                        bool isBullish = _currentBar.Close > _currentBar.Open;
-
-                        // For bullish candles: process swing lows first, then swing highs
-                        // For bearish candles: process swing highs first, then swing lows
-                        // swingPointsAtIndex.Sort((a, b) =>
-                        // {
-                        //     if (isBullish)
-                        //     {
-                        //         if (a.Direction == Direction.Down && b.Direction == Direction.Up) return -1;
-                        //         if (a.Direction == Direction.Up && b.Direction == Direction.Down) return 1;
-                        //     }
-                        //     else
-                        //     {
-                        //         if (a.SwingType == SwingType.H && b.SwingType == SwingType.L) return -1;
-                        //         if (a.SwingType == SwingType.L && b.SwingType == SwingType.H) return 1;
-                        //     }
-                        //
-                        //     return 0;
-                        // });
                         swingPointsAtIndex.OrderBy(s => s.Number);
 
                         // Process each swing point in the sorted order
@@ -184,7 +165,7 @@ namespace Zuva
                             if (_currentBar.OpenTime == new DateTime(2025, 5, 8, 18, 39, 00))
                             {
                                 Chart.DrawVerticalLine("test", _currentBar.OpenTime, Color.Red, 1, LineStyle.Dots);
-                                Print($"Swing Point Price: {swingPoint.Price}. Direction: {swingPoint.Direction}");
+                                Print($"Swing Point {swingPoint.Number}, Price: {swingPoint.Price}. Direction: {swingPoint.Direction}");
                             }
                             
                             // Process for market structure if enabled

@@ -15,6 +15,9 @@ namespace Zuva.Services
         private bool _lastSwingWasHigh = false;
         private bool _lastSwingWasLow = false;
 
+        // Add counter to track swing point numbers
+        private int _currentSwingPointNumber = 0;
+
         private readonly IndicatorDataSeries _swingHighs;
         private readonly IndicatorDataSeries _swingLows;
 
@@ -73,7 +76,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Up
                         );
-
+                        highSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(highSwingPoint);
                         _lastHighSwingPoint = highSwingPoint;
 
@@ -94,7 +97,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Down
                         );
-
+                        lowSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(lowSwingPoint);
                         _lastLowSwingPoint = lowSwingPoint;
 
@@ -121,7 +124,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Down
                         );
-
+                        lowSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(lowSwingPoint);
                         _lastLowSwingPoint = lowSwingPoint;
 
@@ -142,7 +145,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Up
                         );
-
+                        highSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(highSwingPoint);
                         _lastHighSwingPoint = highSwingPoint;
 
@@ -178,7 +181,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Down
                         );
-
+                        lowSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(lowSwingPoint);
                         _lastLowSwingPoint = lowSwingPoint;
 
@@ -199,7 +202,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Up
                         );
-
+                        highSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(highSwingPoint);
                         _lastHighSwingPoint = highSwingPoint;
 
@@ -226,7 +229,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Up
                         );
-
+                        highSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(highSwingPoint);
                         _lastHighSwingPoint = highSwingPoint;
 
@@ -247,7 +250,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Down
                         );
-
+                        lowSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(lowSwingPoint);
                         _lastLowSwingPoint = lowSwingPoint;
 
@@ -279,7 +282,7 @@ namespace Zuva.Services
                         LiquidityType.Normal,
                         Direction.Up
                     );
-
+                    highSwingPoint.Number = ++_currentSwingPointNumber;
                     _swingPoints.Add(highSwingPoint);
                     _lastHighSwingPoint = highSwingPoint;
 
@@ -310,7 +313,7 @@ namespace Zuva.Services
                         LiquidityType.Normal,
                         Direction.Up
                     );
-
+                    highSwingPoint.Number = ++_currentSwingPointNumber;
                     _swingPoints.Add(highSwingPoint);
                     _lastHighSwingPoint = highSwingPoint;
 
@@ -337,7 +340,7 @@ namespace Zuva.Services
                         LiquidityType.Normal,
                         Direction.Down
                     );
-
+                    lowSwingPoint.Number = ++_currentSwingPointNumber;
                     _swingPoints.Add(lowSwingPoint);
                     _lastLowSwingPoint = lowSwingPoint;
 
@@ -368,7 +371,7 @@ namespace Zuva.Services
                         LiquidityType.Normal,
                         Direction.Down
                     );
-
+                    lowSwingPoint.Number = ++_currentSwingPointNumber;
                     _swingPoints.Add(lowSwingPoint);
                     _lastLowSwingPoint = lowSwingPoint;
 
@@ -399,7 +402,7 @@ namespace Zuva.Services
                         LiquidityType.Normal,
                         Direction.Down
                     );
-
+                    lowSwingPoint.Number = ++_currentSwingPointNumber;
                     _swingPoints.Add(lowSwingPoint);
                     _lastLowSwingPoint = lowSwingPoint;
 
@@ -426,7 +429,7 @@ namespace Zuva.Services
                         LiquidityType.Normal,
                         Direction.Up
                     );
-
+                    highSwingPoint.Number = ++_currentSwingPointNumber;
                     _swingPoints.Add(highSwingPoint);
                     _lastHighSwingPoint = highSwingPoint;
 
@@ -484,7 +487,7 @@ namespace Zuva.Services
                                 LiquidityType.Normal,
                                 Direction.Up
                             );
-
+                            highSwingPoint.Number = ++_currentSwingPointNumber;
                             _swingPoints.Add(highSwingPoint);
                             _lastHighSwingPoint = highSwingPoint;
                         }
@@ -508,7 +511,7 @@ namespace Zuva.Services
                                 LiquidityType.Normal,
                                 Direction.Down
                             );
-
+                            lowSwingPoint.Number = ++_currentSwingPointNumber;
                             _swingPoints.Add(lowSwingPoint);
                             _lastLowSwingPoint = lowSwingPoint;
                         }
@@ -538,7 +541,7 @@ namespace Zuva.Services
                                 LiquidityType.Normal,
                                 Direction.Down
                             );
-
+                            lowSwingPoint.Number = ++_currentSwingPointNumber;
                             _swingPoints.Add(lowSwingPoint);
                             _lastLowSwingPoint = lowSwingPoint;
                         }
@@ -562,7 +565,7 @@ namespace Zuva.Services
                                 LiquidityType.Normal,
                                 Direction.Up
                             );
-
+                            highSwingPoint.Number = ++_currentSwingPointNumber;
                             _swingPoints.Add(highSwingPoint);
                             _lastHighSwingPoint = highSwingPoint;
                         }
@@ -601,7 +604,7 @@ namespace Zuva.Services
                                 LiquidityType.Normal,
                                 Direction.Down
                             );
-
+                            lowSwingPoint.Number = ++_currentSwingPointNumber;
                             _swingPoints.Add(lowSwingPoint);
                             _lastLowSwingPoint = lowSwingPoint;
                         }
@@ -625,7 +628,7 @@ namespace Zuva.Services
                                 LiquidityType.Normal,
                                 Direction.Up
                             );
-
+                            highSwingPoint.Number = ++_currentSwingPointNumber;
                             _swingPoints.Add(highSwingPoint);
                             _lastHighSwingPoint = highSwingPoint;
                         }
@@ -655,7 +658,7 @@ namespace Zuva.Services
                                 LiquidityType.Normal,
                                 Direction.Up
                             );
-
+                            highSwingPoint.Number = ++_currentSwingPointNumber;
                             _swingPoints.Add(highSwingPoint);
                             _lastHighSwingPoint = highSwingPoint;
                         }
@@ -679,7 +682,7 @@ namespace Zuva.Services
                                 LiquidityType.Normal,
                                 Direction.Down
                             );
-
+                            lowSwingPoint.Number = ++_currentSwingPointNumber;
                             _swingPoints.Add(lowSwingPoint);
                             _lastLowSwingPoint = lowSwingPoint;
                         }
@@ -714,7 +717,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Up
                         );
-
+                        highSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(highSwingPoint);
                         _lastHighSwingPoint = highSwingPoint;
                     }
@@ -748,7 +751,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Up
                         );
-
+                        highSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(highSwingPoint);
                         _lastHighSwingPoint = highSwingPoint;
                     }
@@ -778,7 +781,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Down
                         );
-
+                        lowSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(lowSwingPoint);
                         _lastLowSwingPoint = lowSwingPoint;
                     }
@@ -812,7 +815,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Down
                         );
-
+                        lowSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(lowSwingPoint);
                         _lastLowSwingPoint = lowSwingPoint;
                     }
@@ -846,7 +849,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Down
                         );
-
+                        lowSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(lowSwingPoint);
                         _lastLowSwingPoint = lowSwingPoint;
                     }
@@ -876,7 +879,7 @@ namespace Zuva.Services
                             LiquidityType.Normal,
                             Direction.Up
                         );
-
+                        highSwingPoint.Number = ++_currentSwingPointNumber;
                         _swingPoints.Add(highSwingPoint);
                         _lastHighSwingPoint = highSwingPoint;
                     }
