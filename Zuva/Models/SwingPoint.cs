@@ -6,6 +6,7 @@ public class SwingPoint
 {
     public SwingType SwingType { get; set; }
     public int Index { get; set; }
+    public int Number { get; set; }
     public int PreviousIndex { get; set; }
     public int NextIndex { get; set; }
     public int IndexThatBrokeSwing { get; set; }
