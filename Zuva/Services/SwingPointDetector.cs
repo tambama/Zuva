@@ -917,6 +917,11 @@ namespace Zuva.Services
         {
             return _swingPoints.Find(sp => sp.Index == index);
         }
+        
+        public List<SwingPoint> GetSwingPointsAtIndex(int index)
+        {
+            return _swingPoints.FindAll(sp => sp.Index == index);
+        }
 
         // Check if there's a swing point at specific index
         public bool HasSwingPointAtIndex(int index)
