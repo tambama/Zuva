@@ -217,7 +217,7 @@ namespace Zuva.Services
                                 }
                                 
                                 // Draw a red icon for LL confirmation
-                                _chart.DrawIcon($"{low.Time}-ll", ChartIconType.DownTriangle, low.Time, low.Price, Color.Red);
+                                _chart.DrawIcon($"{low.Time}-ll", ChartIconType.Circle, low.Time, low.Price, Color.Red);
                                 
                                 // Mark in indicator series
                                 if (low.Index >= 0 && low.Index < _lls.Count)
@@ -241,7 +241,7 @@ namespace Zuva.Services
                         point.SwingType = SwingType.HH;
                         
                         // Draw a green icon for HH confirmation
-                        _chart.DrawIcon($"{point.Time}-hh", ChartIconType.UpTriangle, point.Time, point.Price, Color.Green);
+                        //_chart.DrawIcon($"{point.Time}-hh", ChartIconType.UpTriangle, point.Time, point.Price, Color.Green);
                         
                         // Mark in indicator series
                         if (point.Index >= 0 && point.Index < _hhs.Count)
@@ -272,7 +272,7 @@ namespace Zuva.Services
                             }
                             
                             // Draw a red icon for LL confirmation
-                            _chart.DrawIcon($"{point.Time}-ll", ChartIconType.DownTriangle, point.Time, point.Price, Color.Red);
+                            _chart.DrawIcon($"{point.Time}-ll", ChartIconType.Circle, point.Time, point.Price, Color.Red);
                             
                             // Mark in indicator series
                             if (point.Index >= 0 && point.Index < _lls.Count)
@@ -339,7 +339,7 @@ namespace Zuva.Services
                             }
                             
                             // Draw a red icon for LL confirmation
-                            _chart.DrawIcon($"{low.Time}-ll", ChartIconType.DownTriangle, low.Time, low.Price, Color.Red);
+                            _chart.DrawIcon($"{low.Time}-ll", ChartIconType.Circle, low.Time, low.Price, Color.Red);
                             
                             // Mark in indicator series
                             if (low.Index >= 0 && low.Index < _lls.Count)
@@ -378,7 +378,7 @@ namespace Zuva.Services
                                 }
                                 
                                 // Draw a green icon for HH confirmation
-                                _chart.DrawIcon($"{high.Time}-hh", ChartIconType.UpTriangle, high.Time, high.Price, Color.Green);
+                                _chart.DrawIcon($"{high.Time}-hh", ChartIconType.Circle, high.Time, high.Price, Color.Green);
                                 
                                 // Mark in indicator series
                                 if (high.Index >= 0 && high.Index < _hhs.Count)
@@ -402,7 +402,7 @@ namespace Zuva.Services
                         point.SwingType = SwingType.LL;
                         
                         // Draw a red icon for LL confirmation
-                        _chart.DrawIcon($"{point.Time}-ll", ChartIconType.DownTriangle, point.Time, point.Price, Color.Red);
+                        //_chart.DrawIcon($"{point.Time}-ll", ChartIconType.DownTriangle, point.Time, point.Price, Color.Red);
                         
                         // Mark in indicator series
                         if (point.Index >= 0 && point.Index < _lls.Count)
@@ -433,7 +433,7 @@ namespace Zuva.Services
                             }
                             
                             // Draw a green icon for HH confirmation
-                            _chart.DrawIcon($"{point.Time}-hh", ChartIconType.UpTriangle, point.Time, point.Price, Color.Green);
+                            _chart.DrawIcon($"{point.Time}-hh", ChartIconType.Circle, point.Time, point.Price, Color.Green);
                             
                             // Mark in indicator series
                             if (point.Index >= 0 && point.Index < _hhs.Count)
@@ -500,7 +500,7 @@ namespace Zuva.Services
                             }
                             
                             // Draw a green icon for HH confirmation
-                            _chart.DrawIcon($"{high.Time}-hh", ChartIconType.UpTriangle, high.Time, high.Price, Color.Green);
+                            _chart.DrawIcon($"{high.Time}-hh", ChartIconType.Circle, high.Time, high.Price, Color.Green);
                             
                             // Mark in indicator series
                             if (high.Index >= 0 && high.Index < _hhs.Count)
