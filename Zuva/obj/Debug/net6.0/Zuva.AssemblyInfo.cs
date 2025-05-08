@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Zuva")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e7ac2c2c94dcda1fb2088f0f708ec01554af56ee")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+39b15799a9167f85f6319cb042b9572af92014ef")]
 [assembly: System.Reflection.AssemblyProductAttribute("Zuva")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Zuva")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -113,7 +113,7 @@ namespace Zuva
             // You can remove this check if you want to process all historical data
             if (_currentBar.OpenTime.Date != DateTime.Today)
             {
-                return;
+                //return;
             }
 
             if (ShowSwingPoints)
