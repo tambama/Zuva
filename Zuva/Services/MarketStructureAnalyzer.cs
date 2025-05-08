@@ -19,32 +19,38 @@ namespace Zuva.Services
         private readonly IndicatorDataSeries _lhs; // Lower Highs
         private readonly IndicatorDataSeries _lls; // Lower Lows
         private readonly IndicatorDataSeries _hls; // Higher Lows
+        private readonly bool _showStructure;
+        private readonly bool _showChoch;
 
         // Market structure state
         private Direction _bias = Direction.Up; // Current market bias
-        
+
         // Break of Structure points
         private SwingPoint _highBOS;
         private SwingPoint _lowBOS;
-        
+
         // Change of Character points
         private SwingPoint _highCHOCH;
         private SwingPoint _lowCHOCH;
-        
+
         // Inducement points
         private SwingPoint _highIND;
         private SwingPoint _lowIND;
-        
+
+        // Previous inducement tracking
+        private DateTime? _previousHighIndTime;
+        private DateTime? _previousLowIndTime;
+
         // Lists for ordered swing points 
         private List<SwingPoint> _orderedHighs = new List<SwingPoint>();
         private List<SwingPoint> _orderedLows = new List<SwingPoint>();
-        
+
         // Collection for external liquidity points
         private List<SwingPoint> _externalLiquidity = new List<SwingPoint>();
-        
+
         // Reference to all swing points
         private List<SwingPoint> _swingPoints = new List<SwingPoint>();
-        
+
         // Flag to track if we're properly initialized
         private bool _isInitialized = false;
 
@@ -55,7 +61,9 @@ namespace Zuva.Services
             IndicatorDataSeries hhs,
             IndicatorDataSeries lhs,
             IndicatorDataSeries lls,
-            IndicatorDataSeries hls)
+            IndicatorDataSeries hls,
+            bool showStructure,
+            bool showChoch)
         {
             _chart = chart;
             _highs = highs;
@@ -64,6 +72,8 @@ namespace Zuva.Services
             _lhs = lhs;
             _lls = lls;
             _hls = hls;
+            _showStructure = showStructure;
+            _showChoch = showChoch;
         }
 
         /// <summary>
@@ -73,31 +83,39 @@ namespace Zuva.Services
         {
             if (swingPoints == null || swingPoints.Count < 2)
                 return;
-            
+
             _swingPoints = swingPoints;
-            
+
             // Get ordered highs and lows
             _orderedHighs = swingPoints.Where(s => s.SwingType == SwingType.H)
                 .OrderByDescending(s => s.Index)
                 .ToList();
-                
+
             _orderedLows = swingPoints.Where(s => s.SwingType == SwingType.L)
                 .OrderByDescending(s => s.Index)
                 .ToList();
-            
+
             // Only proceed if we have at least one high and one low
             if (_orderedHighs.Count == 0 || _orderedLows.Count == 0)
                 return;
-                
+
             // Set initial BOS points
             _highBOS = _orderedHighs[0];
-            _chart.DrawIcon($"{_highBOS.Time}-bos", ChartIconType.Circle, _highBOS.Time, _highBOS.Price, Color.Pink);
+            if (_showStructure)
+            {
+                _chart.DrawIcon($"{_highBOS.Time}-bos", ChartIconType.Circle, _highBOS.Time, _highBOS.Price,
+                    Color.Pink);
+            }
+
             _lowBOS = _orderedLows[0];
-            _chart.DrawIcon($"{_lowBOS.Time}-bos", ChartIconType.Circle, _lowBOS.Time, _lowBOS.Price, Color.Pink);
-                
+            if (_showStructure)
+            {
+                _chart.DrawIcon($"{_lowBOS.Time}-bos", ChartIconType.Circle, _lowBOS.Time, _lowBOS.Price, Color.Pink);
+            }
+
             // Determine initial bias based on the relative positions of the latest highs and lows
             DetermineInitialBias();
-            
+
             _isInitialized = true;
         }
 
@@ -113,23 +131,28 @@ namespace Zuva.Services
                 var prevHigh = _orderedHighs[1];
                 var latestLow = _orderedLows[0];
                 var prevLow = _orderedLows[1];
-                
+
                 bool higherHigh = latestHigh.Price > prevHigh.Price;
                 bool higherLow = latestLow.Price > prevLow.Price;
-                
+
                 // Uptrend: Higher Highs and Higher Lows
                 if (higherHigh && higherLow)
                 {
                     _bias = Direction.Up;
-                    
+
                     // Draw green icons for HH and HL
-                    _chart.DrawIcon($"{latestHigh.Time}-hh", ChartIconType.UpTriangle, latestHigh.Time, latestHigh.Price, Color.Green);
-                    _chart.DrawIcon($"{latestLow.Time}-hl", ChartIconType.UpTriangle, latestLow.Time, latestLow.Price, Color.Green);
-                    
+                    if (_showStructure)
+                    {
+                        _chart.DrawIcon($"{latestHigh.Time}-hh", ChartIconType.Circle, latestHigh.Time,
+                            latestHigh.Price, Color.Green);
+                        _chart.DrawIcon($"{latestLow.Time}-hl", ChartIconType.Circle, latestLow.Time,
+                            latestLow.Price, Color.Red);
+                    }
+
                     // Mark in the indicator series
                     if (latestHigh.Index >= 0 && latestHigh.Index < _hhs.Count)
                         _hhs[latestHigh.Index] = latestHigh.Price;
-                    
+
                     if (latestLow.Index >= 0 && latestLow.Index < _hls.Count)
                         _hls[latestLow.Index] = latestLow.Price;
                 }
@@ -137,15 +160,20 @@ namespace Zuva.Services
                 else if (!higherHigh && !higherLow)
                 {
                     _bias = Direction.Down;
-                    
+
                     // Draw red icons for LH and LL
-                    _chart.DrawIcon($"{latestHigh.Time}-lh", ChartIconType.DownTriangle, latestHigh.Time, latestHigh.Price, Color.Red);
-                    _chart.DrawIcon($"{latestLow.Time}-ll", ChartIconType.DownTriangle, latestLow.Time, latestLow.Price, Color.Red);
-                    
+                    if (_showStructure)
+                    {
+                        _chart.DrawIcon($"{latestHigh.Time}-lh", ChartIconType.Circle, latestHigh.Time,
+                            latestHigh.Price, Color.Green);
+                        _chart.DrawIcon($"{latestLow.Time}-ll", ChartIconType.Circle, latestLow.Time,
+                            latestLow.Price, Color.Red);
+                    }
+
                     // Mark in the indicator series
                     if (latestHigh.Index >= 0 && latestHigh.Index < _lhs.Count)
                         _lhs[latestHigh.Index] = latestHigh.Price;
-                    
+
                     if (latestLow.Index >= 0 && latestLow.Index < _lls.Count)
                         _lls[latestLow.Index] = latestLow.Price;
                 }
@@ -164,7 +192,7 @@ namespace Zuva.Services
                     _bias = latestPoint.SwingType == SwingType.H ? Direction.Up : Direction.Down;
                 }
             }
-            
+
             // Always update the bias on the chart regardless of how we determined it
             UpdateBiasOnChart();
         }
@@ -177,7 +205,7 @@ namespace Zuva.Services
             // Skip if we haven't been properly initialized
             if (!_isInitialized || swingPoint == null || _highBOS == null || _lowBOS == null)
                 return;
-            
+
             // Update ordered lists
             if (swingPoint.SwingType == SwingType.H)
             {
@@ -187,24 +215,24 @@ namespace Zuva.Services
             {
                 _orderedLows.Insert(0, swingPoint);
             }
-                
+
             if (swingPoint.Direction == Direction.Up)
             {
                 // Compare with _highBOS only if it exists
                 if (_highBOS != null && swingPoint.Price > _highBOS.Price)
                 {
                     _highBOS = swingPoint;
-                    
+
                     // Only set _lowCHOCH if _lowBOS exists
                     if (_lowBOS != null)
                     {
                         _lowCHOCH = _lowBOS;
-                        
+
                         // Only try to mark the low in the series if we have a valid index
                         if (_lowBOS.Index >= 0 && _lowBOS.Index < _lows.Count)
                         {
                             _lows[_lowBOS.Index] = _lowBOS.Price;
-                            
+
                             // Find the low in ordered lows and check if it exists before manipulating
                             var low = _orderedLows.FirstOrDefault(p => p.Index == _lowBOS.Index);
                             if (low != null)
@@ -215,10 +243,14 @@ namespace Zuva.Services
                                 {
                                     _externalLiquidity.Add(low);
                                 }
-                                
+
                                 // Draw a red icon for LL confirmation
-                                _chart.DrawIcon($"{low.Time}-ll", ChartIconType.Circle, low.Time, low.Price, Color.Red);
-                                
+                                if (_showStructure)
+                                {
+                                    _chart.DrawIcon($"{low.Time}-ll", ChartIconType.Circle, low.Time, low.Price,
+                                        Color.Red);
+                                }
+
                                 // Mark in indicator series
                                 if (low.Index >= 0 && low.Index < _lls.Count)
                                     _lls[low.Index] = low.Price;
@@ -228,62 +260,90 @@ namespace Zuva.Services
 
                     if (_bias == Direction.Up && _orderedLows.Count > 0)
                     {
+                        // Clean up previous inducement
+                        CleanupPreviousInducement(_previousHighIndTime, true);
+
                         _highIND = _orderedLows[0];
-                        
+                        _previousHighIndTime = _highIND.Time;
+
                         // Draw a pink icon for inducement
-                        _chart.DrawIcon($"{_highIND.Time}-ind", ChartIconType.Diamond, _highIND.Time, _highIND.Price, Color.Pink);
+                        if (_showStructure)
+                        {
+                            _chart.DrawIcon($"{_highIND.Time}-ind", ChartIconType.Diamond, _highIND.Time,
+                                _highIND.Price, Color.Pink);
+                        }
                     }
-                    
+
                     var point = _swingPoints.FirstOrDefault(s => s.Index == _highBOS.Index);
                     if (point != null)
                     {
                         point.Swept = true;
                         point.SwingType = SwingType.HH;
-                        
-                        // Draw a green icon for HH confirmation
-                        //_chart.DrawIcon($"{point.Time}-hh", ChartIconType.UpTriangle, point.Time, point.Price, Color.Green);
-                        
+
                         // Mark in indicator series
                         if (point.Index >= 0 && point.Index < _hhs.Count)
                             _hhs[point.Index] = point.Price;
                     }
                 }
-                
+
                 // Mark Low point after taking out inducement in a downtrend
                 if (_bias == Direction.Down && _lowIND != null && swingPoint.Bar.Close > _lowIND.Price)
                 {
+                    // Draw a line for swept inducement
+                    if (_showChoch)
+                    {
+                        _chart.DrawStraightLine(
+                            $"ind-sweep-{_lowIND.Time}-{swingPoint.Time}",
+                            _lowIND.Time,
+                            _lowIND.Price,
+                            swingPoint.Time,
+                            _lowIND.Price,
+                            null,
+                            LineStyle.Solid,
+                            Color.LightGray,
+                            false,
+                            true,
+                            false
+                        );
+                    }
+
                     if (_lowBOS != null)
                     {
                         var point = _swingPoints.FirstOrDefault(s => s.Index == _lowBOS.Index);
                         if (point != null)
                         {
                             point.SwingType = SwingType.LL;
-                            
+
                             // Only try to mark the low in the series if we have a valid index
                             if (point.Index >= 0 && point.Index < _lows.Count)
                             {
                                 _lows[point.Index] = point.Price;
                             }
-                            
+
                             var liquidity = _externalLiquidity.Any(l => l.Index == point.Index);
                             if (!liquidity)
                             {
                                 _externalLiquidity.Add(point);
                             }
-                            
+
                             // Draw a red icon for LL confirmation
-                            _chart.DrawIcon($"{point.Time}-ll", ChartIconType.Circle, point.Time, point.Price, Color.Red);
-                            
+                            if (_showStructure)
+                            {
+                                _chart.DrawIcon($"{point.Time}-ll", ChartIconType.Circle, point.Time, point.Price,
+                                    Color.Red);
+                            }
+
                             // Mark in indicator series
                             if (point.Index >= 0 && point.Index < _lls.Count)
                                 _lls[point.Index] = point.Price;
                         }
                     }
-                    
+
                     // Clear the inducement
                     _highIND = null;
                     _highBOS = swingPoint;
                     _lowIND = null;
+                    _previousLowIndTime = null;
                 }
 
                 // Change of Character
@@ -293,54 +353,68 @@ namespace Zuva.Services
                     if (point != null)
                     {
                         point.Swept = true;
-                        
+
                         // Draw a straight trendline from the CHOCH point to the confirming candle
-                        _chart.DrawStraightLine(
-                            $"choch-{point.Time}-{swingPoint.Time}",
-                            point.Time,
-                            point.Price,
-                            swingPoint.Time,
-                            point.Price,
-                            "CHOCH",
-                            LineStyle.Solid,
-                            Color.Red,
-                            true,
-                            true,
-                            false
-                        );
+                        if (_showChoch)
+                        {
+                            _chart.DrawStraightLine(
+                                $"choch-{point.Time}-{swingPoint.Time}",
+                                point.Time,
+                                point.Price,
+                                swingPoint.Time,
+                                point.Price,
+                                null,
+                                LineStyle.Solid,
+                                Color.Red,
+                                false,
+                                true,
+                                false
+                            );
+                        }
                     }
-                    
+
                     _highBOS = swingPoint;
-                    
+
                     if (_orderedLows.Count > 0)
                     {
+                        // Clean up previous inducement
+                        CleanupPreviousInducement(_previousHighIndTime, true);
+
                         _highIND = _orderedLows[0];
-                        
+                        _previousHighIndTime = _highIND.Time;
+
                         // Draw a pink icon for inducement
-                        _chart.DrawIcon($"{_highIND.Time}-ind", ChartIconType.Diamond, _highIND.Time, _highIND.Price, Color.Pink);
+                        if (_showStructure)
+                        {
+                            _chart.DrawIcon($"{_highIND.Time}-ind", ChartIconType.Diamond, _highIND.Time,
+                                _highIND.Price, Color.Pink);
+                        }
                     }
-                    
+
                     _highCHOCH = null;
                     _bias = Direction.Up;
-                    
+
                     if (_lowCHOCH != null && _lowCHOCH.Index >= 0 && _lowCHOCH.Index < _lows.Count)
                     {
                         _lows[_lowCHOCH.Index] = _lowCHOCH.Price;
-                        
+
                         var low = _swingPoints.FirstOrDefault(s => s.Index == _lowCHOCH.Index);
                         if (low != null)
                         {
                             low.SwingType = SwingType.LL;
-                            
+
                             var liquidity = _externalLiquidity.Any(l => l.Index == _lowCHOCH.Index);
                             if (!liquidity)
                             {
                                 _externalLiquidity.Add(low);
                             }
-                            
+
                             // Draw a red icon for LL confirmation
-                            _chart.DrawIcon($"{low.Time}-ll", ChartIconType.Circle, low.Time, low.Price, Color.Red);
-                            
+                            if (_showStructure)
+                            {
+                                _chart.DrawIcon($"{low.Time}-ll", ChartIconType.Circle, low.Time, low.Price, Color.Red);
+                            }
+
                             // Mark in indicator series
                             if (low.Index >= 0 && low.Index < _lls.Count)
                                 _lls[low.Index] = low.Price;
@@ -354,32 +428,36 @@ namespace Zuva.Services
                 if (_lowBOS != null && swingPoint.Price < _lowBOS.Price)
                 {
                     _lowBOS = swingPoint;
-                    
+
                     // Only set _highCHOCH if _highBOS exists
                     if (_highBOS != null)
                     {
                         _highCHOCH = _highBOS;
-                        
+
                         // Only try to mark the high in the series if we have a valid index
                         if (_highBOS.Index >= 0 && _highBOS.Index < _highs.Count)
                         {
                             _highs[_highBOS.Index] = _highBOS.Price;
-                            
+
                             // Find the high in ordered highs and check if it exists before manipulating
                             var high = _orderedHighs.FirstOrDefault(p => p.Index == _highBOS.Index);
                             if (high != null)
                             {
                                 high.SwingType = SwingType.HH;
-                                
+
                                 var liquidity = _externalLiquidity.Any(l => l.Index == _highBOS.Index);
                                 if (!liquidity)
                                 {
                                     _externalLiquidity.Add(high);
                                 }
-                                
+
                                 // Draw a green icon for HH confirmation
-                                _chart.DrawIcon($"{high.Time}-hh", ChartIconType.Circle, high.Time, high.Price, Color.Green);
-                                
+                                if (_showStructure)
+                                {
+                                    _chart.DrawIcon($"{high.Time}-hh", ChartIconType.Circle, high.Time, high.Price,
+                                        Color.Green);
+                                }
+
                                 // Mark in indicator series
                                 if (high.Index >= 0 && high.Index < _hhs.Count)
                                     _hhs[high.Index] = high.Price;
@@ -389,64 +467,92 @@ namespace Zuva.Services
 
                     if (_bias == Direction.Down && _orderedHighs.Count > 0)
                     {
+                        // Clean up previous inducement
+                        CleanupPreviousInducement(_previousLowIndTime, false);
+
                         _lowIND = _orderedHighs[0];
-                        
+                        _previousLowIndTime = _lowIND.Time;
+
                         // Draw a pink icon for inducement
-                        _chart.DrawIcon($"{_lowIND.Time}-ind", ChartIconType.Diamond, _lowIND.Time, _lowIND.Price, Color.Pink);
+                        if (_showStructure)
+                        {
+                            _chart.DrawIcon($"{_lowIND.Time}-ind", ChartIconType.Diamond, _lowIND.Time, _lowIND.Price,
+                                Color.Pink);
+                        }
                     }
-                    
+
                     var point = _swingPoints.FirstOrDefault(s => s.Index == _lowBOS.Index);
                     if (point != null)
                     {
                         point.Swept = true;
                         point.SwingType = SwingType.LL;
-                        
-                        // Draw a red icon for LL confirmation
-                        //_chart.DrawIcon($"{point.Time}-ll", ChartIconType.DownTriangle, point.Time, point.Price, Color.Red);
-                        
+
                         // Mark in indicator series
                         if (point.Index >= 0 && point.Index < _lls.Count)
                             _lls[point.Index] = point.Price;
                     }
                 }
-                
+
                 // Mark High point after taking out inducement in an uptrend
                 if (_bias == Direction.Up && _highIND != null && swingPoint.Bar.Close < _highIND.Price)
                 {
+                    // Draw a line for swept inducement
+                    if (_showChoch)
+                    {
+                        _chart.DrawStraightLine(
+                            $"ind-sweep-{_highIND.Time}-{swingPoint.Time}",
+                            _highIND.Time,
+                            _highIND.Price,
+                            swingPoint.Time,
+                            _highIND.Price,
+                            null,
+                            LineStyle.Solid,
+                            Color.LightGray,
+                            false,
+                            true,
+                            false
+                        );
+                    }
+
                     if (_highBOS != null)
                     {
                         var point = _swingPoints.FirstOrDefault(s => s.Index == _highBOS.Index);
                         if (point != null)
                         {
                             point.SwingType = SwingType.HH;
-                            
+
                             // Only try to mark the high in the series if we have a valid index
                             if (point.Index >= 0 && point.Index < _highs.Count)
                             {
                                 _highs[point.Index] = point.Price;
                             }
-                            
+
                             var liquidity = _externalLiquidity.Any(l => l.Index == point.Index);
                             if (!liquidity)
                             {
                                 _externalLiquidity.Add(point);
                             }
-                            
+
                             // Draw a green icon for HH confirmation
-                            _chart.DrawIcon($"{point.Time}-hh", ChartIconType.Circle, point.Time, point.Price, Color.Green);
-                            
+                            if (_showStructure)
+                            {
+                                _chart.DrawIcon($"{point.Time}-hh", ChartIconType.Circle, point.Time, point.Price,
+                                    Color.Green);
+                            }
+
                             // Mark in indicator series
                             if (point.Index >= 0 && point.Index < _hhs.Count)
                                 _hhs[point.Index] = point.Price;
                         }
                     }
-                    
+
                     // Clear the inducement
                     _lowIND = null;
                     _lowBOS = swingPoint;
                     _highIND = null;
+                    _previousHighIndTime = null;
                 }
-                
+
                 // Change of Character
                 if (_lowCHOCH != null && swingPoint.Price < _lowCHOCH.Price)
                 {
@@ -454,54 +560,69 @@ namespace Zuva.Services
                     if (point != null)
                     {
                         point.Swept = true;
-                        
+
                         // Draw a straight trendline from the CHOCH point to the confirming candle
-                        _chart.DrawStraightLine(
-                            $"choch-{point.Time}-{swingPoint.Time}",
-                            point.Time,
-                            point.Price,
-                            swingPoint.Time,
-                            point.Price,
-                            "CHOCH",
-                            LineStyle.Solid,
-                            Color.Red,
-                            true,
-                            true,
-                            false
-                        );
+                        if (_showChoch)
+                        {
+                            _chart.DrawStraightLine(
+                                $"choch-{point.Time}-{swingPoint.Time}",
+                                point.Time,
+                                point.Price,
+                                swingPoint.Time,
+                                point.Price,
+                                null,
+                                LineStyle.Solid,
+                                Color.Red,
+                                false,
+                                true,
+                                false
+                            );
+                        }
                     }
-                    
+
                     _lowBOS = swingPoint;
-                    
+
                     if (_orderedHighs.Count > 0)
                     {
+                        // Clean up previous inducement
+                        CleanupPreviousInducement(_previousLowIndTime, false);
+
                         _lowIND = _orderedHighs[0];
-                        
+                        _previousLowIndTime = _lowIND.Time;
+
                         // Draw a pink icon for inducement
-                        _chart.DrawIcon($"{_lowIND.Time}-ind", ChartIconType.Diamond, _lowIND.Time, _lowIND.Price, Color.Pink);
+                        if (_showStructure)
+                        {
+                            _chart.DrawIcon($"{_lowIND.Time}-ind", ChartIconType.Diamond, _lowIND.Time, _lowIND.Price,
+                                Color.Pink);
+                        }
                     }
-                    
+
                     _lowCHOCH = null;
                     _bias = Direction.Down;
-                    
+
                     if (_highBOS != null && _highBOS.Index >= 0 && _highBOS.Index < _highs.Count)
                     {
                         _highs[_highBOS.Index] = _highBOS.Price;
-                        
+
                         var high = _swingPoints.FirstOrDefault(s => s.Index == _highBOS.Index);
                         if (high != null)
                         {
                             high.SwingType = SwingType.HH;
-                            
+
                             var liquidity = _externalLiquidity.Any(l => l.Index == _highBOS.Index);
                             if (!liquidity && _highBOS != null)
                             {
                                 _externalLiquidity.Add(_highBOS);
                             }
-                            
+
                             // Draw a green icon for HH confirmation
-                            _chart.DrawIcon($"{high.Time}-hh", ChartIconType.Circle, high.Time, high.Price, Color.Green);
-                            
+                            if (_showStructure)
+                            {
+                                _chart.DrawIcon($"{high.Time}-hh", ChartIconType.Circle, high.Time, high.Price,
+                                    Color.Green);
+                            }
+
                             // Mark in indicator series
                             if (high.Index >= 0 && high.Index < _hhs.Count)
                                 _hhs[high.Index] = high.Price;
@@ -509,7 +630,7 @@ namespace Zuva.Services
                     }
                 }
             }
-            
+
             UpdateBiasOnChart();
         }
 
@@ -545,6 +666,16 @@ namespace Zuva.Services
         public Direction GetBias()
         {
             return _bias;
+        }
+
+        // Method to clean up previous inducement icons
+        private void CleanupPreviousInducement(DateTime? previousTime, bool isHigh)
+        {
+            if (previousTime.HasValue)
+            {
+                string iconId = $"{previousTime.Value}-ind";
+                _chart.RemoveObject(iconId);
+            }
         }
     }
 }

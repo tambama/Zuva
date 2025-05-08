@@ -19,9 +19,15 @@ namespace Zuva
         
         [Parameter("HTF", DefaultValue = "H1")]
         public string HTF { get; set; }
-
-        [Parameter("Show Market Structure", DefaultValue = true)]
+        
+        [Parameter("Show Market Structure", Group = "Market Structure", DefaultValue = true)]
         public bool ShowMarketStructure { get; set; }
+
+        [Parameter("Show Structure", Group = "Market Structure", DefaultValue = true)]
+        public bool ShowStructure { get; set; }
+
+        [Parameter("Show CHOCH", Group = "Market Structure", DefaultValue = true)]
+        public bool ShowChoch { get; set; }
 
         [Output("Swing High", Color = Colors.White, PlotType = PlotType.Points, Thickness = 1)]
         public IndicatorDataSeries SwingHighs { get; set; }
@@ -79,24 +85,23 @@ namespace Zuva
             _highTimeFrame = HTF.GetTimeFrameFromString();
             
             // Initialize market structure analyzer if enabled
-            if (ShowMarketStructure)
+            try
             {
-                try
-                {
-                    _marketStructureAnalyzer = new MarketStructureAnalyzer(
-                        Chart,
-                        SwingHighs,
-                        SwingLows,
-                        HigherHighs,
-                        LowerHighs,
-                        LowerLows,
-                        HigherLows
-                    );
-                }
-                catch (Exception ex)
-                {
-                    ShowMarketStructure = false; // Disable to prevent further errors
-                }
+                _marketStructureAnalyzer = new MarketStructureAnalyzer(
+                    Chart,
+                    SwingHighs,
+                    SwingLows,
+                    HigherHighs,
+                    LowerHighs,
+                    LowerLows,
+                    HigherLows,
+                    ShowStructure,
+                    ShowChoch
+                );
+            }
+            catch (Exception ex)
+            {
+                ShowMarketStructure = false; // Disable to prevent further errors
             }
         }
 
