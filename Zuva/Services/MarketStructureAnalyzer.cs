@@ -311,6 +311,23 @@ namespace Zuva.Services
                             false
                         );
                     }
+                    else
+                    {
+                        // Draw small 2-minute inducement line
+                        _chart.DrawStraightLine(
+                            $"ind-sweep-small-{_lowIND.Time}",
+                            _lowIND.Time,
+                            _lowIND.Price,
+                            _lowIND.Time.AddMinutes(2),
+                            _lowIND.Price,
+                            null,
+                            LineStyle.Solid,
+                            Color.LightGray,
+                            false,
+                            true,
+                            false
+                        );
+                    }
 
                     if (_lowBOS != null)
                     {
@@ -367,6 +384,23 @@ namespace Zuva.Services
                                 point.Time,
                                 point.Price,
                                 swingPoint.Time,
+                                point.Price,
+                                null,
+                                LineStyle.Solid,
+                                Color.Red,
+                                false,
+                                true,
+                                false
+                            );
+                        }
+                        else
+                        {
+                            // Draw small 2-minute CHOCH line
+                            _chart.DrawStraightLine(
+                                $"choch-small-{point.Time}",
+                                point.Time,
+                                point.Price,
+                                point.Time.AddMinutes(2),
                                 point.Price,
                                 null,
                                 LineStyle.Solid,
@@ -518,6 +552,23 @@ namespace Zuva.Services
                             false
                         );
                     }
+                    else
+                    {
+                        // Draw small 2-minute inducement line
+                        _chart.DrawStraightLine(
+                            $"ind-sweep-small-{_highIND.Time}",
+                            _highIND.Time,
+                            _highIND.Price,
+                            _highIND.Time.AddMinutes(2),
+                            _highIND.Price,
+                            null,
+                            LineStyle.Solid,
+                            Color.LightGray,
+                            false,
+                            true,
+                            false
+                        );
+                    }
 
                     if (_highBOS != null)
                     {
@@ -574,6 +625,23 @@ namespace Zuva.Services
                                 point.Time,
                                 point.Price,
                                 swingPoint.Time,
+                                point.Price,
+                                null,
+                                LineStyle.Solid,
+                                Color.Red,
+                                false,
+                                true,
+                                false
+                            );
+                        }
+                        else
+                        {
+                            // Draw small 2-minute CHOCH line
+                            _chart.DrawStraightLine(
+                                $"choch-small-{point.Time}",
+                                point.Time,
+                                point.Price,
+                                point.Time.AddMinutes(2),
                                 point.Price,
                                 null,
                                 LineStyle.Solid,

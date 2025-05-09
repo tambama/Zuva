@@ -201,5 +201,47 @@ namespace Mwenje.Extensions
             var text = bias == Direction.Down ? "Bearish" : "Bullish";
             chart.DrawStaticText("bias", text, VerticalAlignment.Bottom, HorizontalAlignment.Left, Color.Wheat);
         }
+        
+        /// <summary>
+        /// Draws a Fair Value Gap (FVG) on the chart with appropriate styling
+        /// </summary>
+        public static void DrawFairValueGap(this Chart chart, Level fvg, string id, int opacity = 8)
+        {
+            // For FVGs, we want to cover the area between low and high
+            double lowPrice = fvg.Low;
+            double highPrice = fvg.High;
+            double midPrice = fvg.Mid;
+            
+            // Start time is the middle point (where the gap occurred)
+            DateTime startTime = fvg.MidTime;
+            
+            // FVGs typically extend until they are filled, so we extend to the right
+            DateTime endTime = startTime.AddMinutes(5); // Extend 5 minutes initially
+            
+            // Set color based on direction (green for bullish, red for bearish)
+            Color color = fvg.Direction == Direction.Up ? Color.Green : Color.Red;
+            
+            // Remove existing FVG if present
+            chart.RemoveObject(id);
+            
+            // Draw a semi-transparent rectangle for the FVG
+            var rectangle = chart.DrawRectangle(id, startTime, lowPrice, endTime, highPrice, color);
+            rectangle.IsFilled = true;
+            rectangle.Color = Color.FromArgb(opacity, rectangle.Color);
+            
+            // Draw lines for the low, mid, and high points
+            string lowLineId = $"{id}-low";
+            string midLineId = $"{id}-mid";
+            string highLineId = $"{id}-high";
+            
+            chart.RemoveObject(lowLineId);
+            chart.RemoveObject(midLineId);
+            chart.RemoveObject(highLineId);
+            
+            // Draw 1-minute long lines
+            chart.DrawTrendLine(lowLineId, startTime, lowPrice, startTime.AddMinutes(1), lowPrice, color, 1, LineStyle.Solid);
+            chart.DrawTrendLine(midLineId, startTime, midPrice, startTime.AddMinutes(1), midPrice, color, 1, LineStyle.Dots);
+            chart.DrawTrendLine(highLineId, startTime, highPrice, startTime.AddMinutes(1), highPrice, color, 1, LineStyle.Solid);
+        }
     }
 }

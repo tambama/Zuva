@@ -29,8 +29,11 @@ namespace Zuva
         [Parameter("Show CHOCH", Group = "Market Structure", DefaultValue = true)]
         public bool ShowChoch { get; set; }
 
-        [Parameter("Show Order Flow", Group = "Order Flow", DefaultValue = false)]
+        [Parameter("Show Order Flow", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowOrderFlow { get; set; }
+        
+        [Parameter("Show Fair Value Gaps", Group = "PD Arrays", DefaultValue = true)]
+        public bool ShowFVG { get; set; }
 
         [Output("Swing High", Color = Colors.White, PlotType = PlotType.Points, Thickness = 1)]
         public IndicatorDataSeries SwingHighs { get; set; }
@@ -78,6 +81,9 @@ namespace Zuva
 
         // PD Array analyzer
         private PdArrayAnalyzer _pdArrayAnalyzer;
+
+        // FVG detector
+        private FvgDetector _fvgDetector;
 
         // Flag to track if we have enough data for market structure analysis
         private bool _marketStructureInitialized = false;
@@ -130,6 +136,18 @@ namespace Zuva
                 // Disable to prevent further errors
                 ShowMarketStructure = false;
             }
+            
+            // Initialize FVG detector
+            try
+            {
+                _fvgDetector = new FvgDetector(Chart, ShowFVG);
+            }
+            catch (Exception ex)
+            {
+                Print("Error initializing FVG Detector: " + ex.Message);
+                // Disable to prevent further errors
+                ShowFVG = false;
+            }
         }
 
         public override void Calculate(int index)
@@ -142,6 +160,19 @@ namespace Zuva
             _currentBarIndex = index;
             _previousBar = Bars[index - 1];
             _previousBarIndex = index - 1;
+            
+            // Process for FVG detection - always detect FVGs regardless of ShowFVG setting
+            if (_fvgDetector != null)
+            {
+                try
+                {
+                    _fvgDetector.DetectFVG(Bars, _previousBarIndex);
+                }
+                catch (Exception ex)
+                {
+                    Print("Error in FVG detection: " + ex.Message);
+                }
+            }
 
             if (ShowSwingPoints)
             {
@@ -196,6 +227,12 @@ namespace Zuva
                                     // Process the new swing point for PD Array analysis
                                     _pdArrayAnalyzer.ProcessSwingPoint(swingPoint);
                                 }
+                            }
+                            
+                            // Check if the swing point is in a FVG
+                            if (_fvgDetector != null && ShowFVG)
+                            {
+                                swingPoint.IsInFVG = _fvgDetector.IsInFVG(swingPoint.Price, swingPoint.Time);
                             }
                         }
                     }
@@ -322,6 +359,22 @@ namespace Zuva
         public Level GetLastBearishPdArray()
         {
             return _pdArrayAnalyzer?.GetLastBearishPdArray();
+        }
+        
+        // Get FVG information
+        public List<Level> GetAllFVGs()
+        {
+            return _fvgDetector?.GetAllFVGs() ?? new List<Level>();
+        }
+        
+        public List<Level> GetBullishFVGs()
+        {
+            return _fvgDetector?.GetBullishFVGs() ?? new List<Level>();
+        }
+        
+        public List<Level> GetBearishFVGs()
+        {
+            return _fvgDetector?.GetBearishFVGs() ?? new List<Level>();
         }
     }
 }
