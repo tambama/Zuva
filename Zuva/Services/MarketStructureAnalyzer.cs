@@ -292,7 +292,7 @@ namespace Zuva.Services
                 }
 
                 // Mark Low point after taking out inducement in a downtrend
-                if (_bias == Direction.Down && _lowIND != null && swingPoint.Bar.Close > _lowIND.Price)
+                if (_bias == Direction.Down && _lowIND != null && swingPoint.Bar.High > _lowIND.Price)
                 {
                     // Draw a line for swept inducement
                     if (_showChoch)
@@ -499,7 +499,7 @@ namespace Zuva.Services
                 }
 
                 // Mark High point after taking out inducement in an uptrend
-                if (_bias == Direction.Up && _highIND != null && swingPoint.Bar.Close < _highIND.Price)
+                if (_bias == Direction.Up && _highIND != null && swingPoint.Bar.Low < _highIND.Price)
                 {
                     // Draw a line for swept inducement
                     if (_showChoch)

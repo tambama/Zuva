@@ -162,6 +162,7 @@ namespace Zuva
                         // Process each swing point in the sorted order
                         foreach (var swingPoint in swingPointsAtIndex)
                         {
+                            if (swingPoint.Number > 5598) continue;
                             if (_currentBar.OpenTime == new DateTime(2025, 5, 8, 18, 39, 00))
                             {
                                 Chart.DrawVerticalLine("test", _currentBar.OpenTime, Color.Red, 1, LineStyle.Dots);
