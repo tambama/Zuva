@@ -34,6 +34,9 @@ namespace Zuva
         
         [Parameter("Show Fair Value Gaps", Group = "PD Arrays", DefaultValue = true)]
         public bool ShowFVG { get; set; }
+        
+        [Parameter("Show Order Blocks", Group = "PD Arrays", DefaultValue = true)]
+        public bool ShowOrderBlock { get; set; }
 
         [Output("Swing High", Color = Colors.White, PlotType = PlotType.Points, Thickness = 1)]
         public IndicatorDataSeries SwingHighs { get; set; }
@@ -137,16 +140,17 @@ namespace Zuva
                 ShowMarketStructure = false;
             }
             
-            // Initialize FVG detector
+            // Initialize FVG detector with order block support
             try
             {
-                _fvgDetector = new FvgDetector(Chart, ShowFVG);
+                _fvgDetector = new FvgDetector(Chart, ShowFVG, ShowOrderBlock, _swingDetector);
             }
             catch (Exception ex)
             {
                 Print("Error initializing FVG Detector: " + ex.Message);
                 // Disable to prevent further errors
                 ShowFVG = false;
+                ShowOrderBlock = false;
             }
         }
 
@@ -161,7 +165,7 @@ namespace Zuva
             _previousBar = Bars[index - 1];
             _previousBarIndex = index - 1;
             
-            // Process for FVG detection - always detect FVGs regardless of ShowFVG setting
+            // Process for FVG and Order Block detection
             if (_fvgDetector != null)
             {
                 try
@@ -170,7 +174,7 @@ namespace Zuva
                 }
                 catch (Exception ex)
                 {
-                    Print("Error in FVG detection: " + ex.Message);
+                    Print("Error in FVG/OrderBlock detection: " + ex.Message);
                 }
             }
 
@@ -229,10 +233,11 @@ namespace Zuva
                                 }
                             }
                             
-                            // Check if the swing point is in a FVG
-                            if (_fvgDetector != null && ShowFVG)
+                            // Check if the swing point is in a FVG or Order Block
+                            if (_fvgDetector != null)
                             {
                                 swingPoint.IsInFVG = _fvgDetector.IsInFVG(swingPoint.Price, swingPoint.Time);
+                                swingPoint.IsInOrderBlock = _fvgDetector.IsInOrderBlock(swingPoint.Price, swingPoint.Time);
                             }
                         }
                     }
@@ -375,6 +380,22 @@ namespace Zuva
         public List<Level> GetBearishFVGs()
         {
             return _fvgDetector?.GetBearishFVGs() ?? new List<Level>();
+        }
+        
+        // Get Order Block information
+        public List<Level> GetAllOrderBlocks()
+        {
+            return _fvgDetector?.GetAllOrderBlocks() ?? new List<Level>();
+        }
+        
+        public List<Level> GetBullishOrderBlocks()
+        {
+            return _fvgDetector?.GetBullishOrderBlocks() ?? new List<Level>();
+        }
+        
+        public List<Level> GetBearishOrderBlocks()
+        {
+            return _fvgDetector?.GetBearishOrderBlocks() ?? new List<Level>();
         }
     }
 }
