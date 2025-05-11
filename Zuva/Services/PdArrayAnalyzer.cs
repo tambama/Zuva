@@ -68,6 +68,138 @@ namespace Zuva.Services
         }
 
         /// <summary>
+        /// Handle the removal of a swing point
+        /// </summary>
+        public void RemoveSwingPoint(SwingPoint removedPoint)
+        {
+            if (removedPoint == null)
+                return;
+            
+            // Remove the swing point from our history
+            _swingPointHistory.RemoveAll(p => p.Index == removedPoint.Index && 
+                                            p.Direction == removedPoint.Direction && 
+                                            Math.Abs(p.Price - removedPoint.Price) < 0.0001);
+            
+            // Find any orderflow levels that reference this swing point
+            var affectedArrays = new List<Level>();
+            
+            foreach (var array in _pdArrays)
+            {
+                bool isAffected = false;
+                
+                // Check if this array uses the removed point as one of its key points
+                if (array.Direction == Direction.Up)
+                {
+                    // For bullish orderflow, check if removed point is the low or high
+                    if (array.IndexLow == removedPoint.Index && removedPoint.Direction == Direction.Down)
+                        isAffected = true;
+                    else if (array.IndexHigh == removedPoint.Index && removedPoint.Direction == Direction.Up)
+                        isAffected = true;
+                }
+                else // Direction.Down
+                {
+                    // For bearish orderflow, check if removed point is the high or low
+                    if (array.IndexHigh == removedPoint.Index && removedPoint.Direction == Direction.Up)
+                        isAffected = true;
+                    else if (array.IndexLow == removedPoint.Index && removedPoint.Direction == Direction.Down)
+                        isAffected = true;
+                }
+                
+                // Check if this array references the removed point in its swept points
+                if (!isAffected && array.SweptSwingPoints != null)
+                {
+                    foreach (var sweptPoint in array.SweptSwingPoints)
+                    {
+                        if (sweptPoint.Index == removedPoint.Index && 
+                            sweptPoint.Direction == removedPoint.Direction &&
+                            Math.Abs(sweptPoint.Price - removedPoint.Price) < 0.0001)
+                        {
+                            isAffected = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // If this array is affected, add it to our list
+                if (isAffected)
+                    affectedArrays.Add(array);
+            }
+            
+            // Remove affected arrays from our collection
+            foreach (var array in affectedArrays)
+            {
+                _pdArrays.Remove(array);
+                
+                // Clean up visualization
+                if (_chart != null)
+                {
+                    // Remove orderflow visualization
+                    string ofId = $"of-{array.Direction}-{array.Index}-{array.IndexHigh}-{array.IndexLow}";
+                    _chart.RemoveObject(ofId);
+                    
+                    // Remove liquidity sweep line if present
+                    if (array.SweptSwingPoint != null)
+                    {
+                        string sweptId = $"swept-{array.Direction}-{array.Index}-{array.SweptSwingPoint.Index}";
+                        _chart.RemoveObject(sweptId);
+                    }
+                }
+            }
+            
+            // If we removed any arrays, we need to recalculate
+            if (affectedArrays.Count > 0)
+            {
+                // Regenerate orderflows based on the remaining points
+                RegenerateOrderFlows();
+            }
+        }
+        
+        /// <summary>
+        /// Regenerate all orderflow levels based on the current swing point history
+        /// </summary>
+        private void RegenerateOrderFlows()
+        {
+            // Clear existing order flows
+            _pdArrays.Clear();
+            
+            // Remove all orderflow visualization
+            if (_chart != null)
+            {
+                // This is a simplistic approach - in a real implementation we would 
+                // need to be more selective about which objects to remove
+                for (int i = 0; i < 1000; i++) // Arbitrary limit
+                {
+                    _chart.RemoveObject($"of-Up-{i}");
+                    _chart.RemoveObject($"of-Down-{i}");
+                    _chart.RemoveObject($"swept-Up-{i}");
+                    _chart.RemoveObject($"swept-Down-{i}");
+                }
+            }
+            
+            // Sort the history by index to ensure chronological order
+            _swingPointHistory.Sort((a, b) => a.Index.CompareTo(b.Index));
+            
+            // Skip if we don't have enough points
+            if (_swingPointHistory.Count < 3)
+                return;
+                
+            // Process each swing point to recreate order flows
+            for (int i = 2; i < _swingPointHistory.Count; i++)
+            {
+                var swingPoint = _swingPointHistory[i];
+                
+                if (swingPoint.Direction == Direction.Down)
+                {
+                    ProcessNewSwingLow(swingPoint);
+                }
+                else if (swingPoint.Direction == Direction.Up)
+                {
+                    ProcessNewSwingHigh(swingPoint);
+                }
+            }
+        }
+
+        /// <summary>
         /// Process a new swing low to calculate bullish orderflow
         /// </summary>
         private void ProcessNewSwingLow(SwingPoint newSwingLow)

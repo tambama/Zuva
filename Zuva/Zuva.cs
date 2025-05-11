@@ -104,6 +104,10 @@ namespace Zuva
 
             _swingDetector = new SwingPointDetector(SwingHighs, SwingLows);
             _htfSwingDetector = new SwingPointDetector(HtfSwingHighs, HtfSwingLows);
+            
+            // Wire up the SwingPointRemoved event
+            _swingDetector.SwingPointRemoved += OnSwingPointRemoved;
+            _htfSwingDetector.SwingPointRemoved += OnSwingPointRemoved;
 
             _highTimeFrame = HTF.GetTimeFrameFromString();
 
@@ -431,6 +435,25 @@ namespace Zuva
             }
     
             return sweptPoints;
+        }
+        
+        // Add this method to handle swing point removal events
+        private void OnSwingPointRemoved(SwingPoint removedPoint)
+        {
+            // Skip if the PD Array analyzer isn't initialized yet
+            if (!_pdArrayAnalyzerInitialized || _pdArrayAnalyzer == null)
+                return;
+        
+            try
+            {
+                // Notify the PD Array analyzer about the removed swing point
+                _pdArrayAnalyzer.RemoveSwingPoint(removedPoint);
+            }
+            catch (Exception ex)
+            {
+                // Log the error but don't crash the indicator
+                Print($"Error handling swing point removal: {ex.Message}");
+            }
         }
     }
 }

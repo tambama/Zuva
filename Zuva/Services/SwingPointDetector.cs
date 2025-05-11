@@ -28,6 +28,12 @@ namespace Zuva.Services
         private SwingPoint _lastHighSwingPoint;
         private SwingPoint _lastLowSwingPoint;
 
+        // Define a delegate for the swing point removed event
+        public delegate void SwingPointRemovedEventHandler(SwingPoint removedPoint);
+
+        // Define the event
+        public event SwingPointRemovedEventHandler SwingPointRemoved;
+
         public SwingPointDetector(IndicatorDataSeries swingHighs, IndicatorDataSeries swingLows)
         {
             _swingHighs = swingHighs;
@@ -112,7 +118,10 @@ namespace Zuva.Services
                         _lastSwingLowValue = low;
 
                         // Remove the old swing point and add a new one
-                        _swingPoints.Remove(_lastLowSwingPoint);
+                        var removedPoint = _lastLowSwingPoint;
+                        _swingPoints.Remove(removedPoint);
+                        // Trigger the event to notify listeners
+                        SwingPointRemoved?.Invoke(removedPoint);
 
                         // Create new low swing point
                         var lowSwingPoint = new SwingPoint(
@@ -217,7 +226,10 @@ namespace Zuva.Services
                         _lastSwingHighValue = high;
 
                         // Remove the old swing point and add a new one
-                        _swingPoints.Remove(_lastHighSwingPoint);
+                        var removedPoint = _lastHighSwingPoint;
+                        _swingPoints.Remove(removedPoint);
+                        // Trigger the event to notify listeners
+                        SwingPointRemoved?.Invoke(removedPoint);
 
                         // Create new high swing point
                         var highSwingPoint = new SwingPoint(
@@ -301,7 +313,10 @@ namespace Zuva.Services
                     _lastSwingHighValue = high;
 
                     // Remove the old swing point and add a new one
-                    _swingPoints.Remove(_lastHighSwingPoint);
+                    var removedPoint = _lastHighSwingPoint;
+                    _swingPoints.Remove(removedPoint);
+                    // Trigger the event to notify listeners
+                    SwingPointRemoved?.Invoke(removedPoint);
 
                     // Create new high swing point
                     var highSwingPoint = new SwingPoint(
@@ -390,7 +405,10 @@ namespace Zuva.Services
                     _lastSwingLowValue = low;
 
                     // Remove the old swing point and add a new one
-                    _swingPoints.Remove(_lastLowSwingPoint);
+                    var removedPoint = _lastLowSwingPoint;
+                    _swingPoints.Remove(removedPoint);
+                    // Trigger the event to notify listeners
+                    SwingPointRemoved?.Invoke(removedPoint);
 
                     // Create new low swing point
                     var lowSwingPoint = new SwingPoint(
@@ -527,7 +545,10 @@ namespace Zuva.Services
                         _lastSwingLowValue = low;
 
                         // Remove the old swing point and add a new one
-                        _swingPoints.Remove(_lastLowSwingPoint);
+                        var removedPoint = _lastLowSwingPoint;
+                        _swingPoints.Remove(removedPoint);
+                        // Trigger the event to notify listeners
+                        SwingPointRemoved?.Invoke(removedPoint);
 
                         // Create new low swing point
                         if (htfCandle.TimeOfLow != null)
@@ -644,7 +665,10 @@ namespace Zuva.Services
                         _lastSwingHighValue = high;
 
                         // Remove the old swing point and add a new one
-                        _swingPoints.Remove(_lastHighSwingPoint);
+                        var removedPoint = _lastHighSwingPoint;
+                        _swingPoints.Remove(removedPoint);
+                        // Trigger the event to notify listeners
+                        SwingPointRemoved?.Invoke(removedPoint);
 
                         // Create new high swing point
                         if (htfCandle.TimeOfHigh != null)
@@ -737,7 +761,10 @@ namespace Zuva.Services
                     _lastSwingHighValue = high;
 
                     // Remove the old swing point and add a new one
-                    _swingPoints.Remove(_lastHighSwingPoint);
+                    var removedPoint = _lastHighSwingPoint;
+                    _swingPoints.Remove(removedPoint);
+                    // Trigger the event to notify listeners
+                    SwingPointRemoved?.Invoke(removedPoint);
 
                     // Create new high swing point
                     if (htfCandle.TimeOfHigh != null)
@@ -835,7 +862,10 @@ namespace Zuva.Services
                     _lastSwingLowValue = low;
 
                     // Remove the old swing point and add a new one
-                    _swingPoints.Remove(_lastLowSwingPoint);
+                    var removedPoint = _lastLowSwingPoint;
+                    _swingPoints.Remove(removedPoint);
+                    // Trigger the event to notify listeners
+                    SwingPointRemoved?.Invoke(removedPoint);
 
                     // Create new low swing point
                     if (htfCandle.TimeOfLow != null)
