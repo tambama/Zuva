@@ -28,6 +28,8 @@ namespace Zuva
 
         [Parameter("Show CHOCH", Group = "Market Structure", DefaultValue = true)]
         public bool ShowChoch { get; set; }
+        [Parameter("Show CISD", Group = "Market Structure", DefaultValue = false)]
+        public bool ShowCISD { get; set; }
 
         [Parameter("Show Order Flow", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowOrderFlow { get; set; }
@@ -137,6 +139,7 @@ namespace Zuva
                     ShowLiquiditySweep, 
                     ShowGauntlet,
                     _fvgDetector,
+                    ShowCISD,
                     message => Print(message));  // Pass the FVG detector reference
             }
             catch (Exception ex)
@@ -485,6 +488,21 @@ namespace Zuva
                 // Log the error but don't crash the indicator
                 Print($"Error handling swing point removal: {ex.Message}");
             }
+        }
+        
+        public List<Level> GetAllCISDLevels()
+        {
+            return _pdArrayAnalyzer?.GetAllCISDLevels() ?? new List<Level>();
+        }
+
+        public List<Level> GetActiveCISDLevels()
+        {
+            return _pdArrayAnalyzer?.GetActiveCISDLevels() ?? new List<Level>();
+        }
+
+        public List<Level> GetConfirmedCISDLevels()
+        {
+            return _pdArrayAnalyzer?.GetConfirmedCISDLevels() ?? new List<Level>();
         }
     }
 }

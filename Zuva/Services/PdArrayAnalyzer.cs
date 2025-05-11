@@ -15,7 +15,7 @@ namespace Zuva.Services
     {
         // Add a delegate for logging
         private readonly Action<string> _logger;
-        
+
         // Collection to store all order flow levels
         private readonly List<Level> _pdArrays = new List<Level>();
 
@@ -30,13 +30,17 @@ namespace Zuva.Services
 
         // Flag to control liquidity sweep visualization
         private readonly bool _showLiquiditySweep;
-        
+
         // Flag to control gauntlet visualization
         private readonly bool _showGauntlet;
 
+        // Flag to control CISD visualization
+        private readonly bool _showCISD;
+        private readonly List<Level> _cisdLevels = new List<Level>();
+
         // Collection to store all gauntlet levels
         private readonly List<Level> _gauntlets = new List<Level>();
-        
+
         // Reference to FVG detector for finding FVGs
         private readonly FvgDetector _fvgDetector;
 
@@ -47,12 +51,13 @@ namespace Zuva.Services
         /// Creates a new instance of the PD Array Analyzer
         /// </summary>
         public PdArrayAnalyzer(
-            Chart chart, 
-            Bars bars, 
-            bool showOrderFlow = false, 
-            bool showLiquiditySweep = false, 
+            Chart chart,
+            Bars bars,
+            bool showOrderFlow = false,
+            bool showLiquiditySweep = false,
             bool showGauntlet = false,
             FvgDetector fvgDetector = null,
+            bool showCISD = false,
             Action<string> logger = null)
         {
             _chart = chart;
@@ -61,6 +66,7 @@ namespace Zuva.Services
             _showLiquiditySweep = showLiquiditySweep;
             _showGauntlet = showGauntlet;
             _fvgDetector = fvgDetector;
+            _showCISD = showCISD;
             _logger = logger ?? (_ => { });
         }
 
@@ -88,6 +94,8 @@ namespace Zuva.Services
                 // Process a new swing high - calculate bearish orderflow
                 ProcessNewSwingHigh(swingPoint);
             }
+
+            CheckCISDActivity(swingPoint, swingPoint.Index);
         }
 
         /// <summary>
@@ -97,19 +105,19 @@ namespace Zuva.Services
         {
             if (removedPoint == null)
                 return;
-            
+
             // Remove the swing point from our history
-            _swingPointHistory.RemoveAll(p => p.Index == removedPoint.Index && 
-                                           p.Direction == removedPoint.Direction && 
-                                           Math.Abs(p.Price - removedPoint.Price) < 0.0001);
-            
+            _swingPointHistory.RemoveAll(p => p.Index == removedPoint.Index &&
+                                              p.Direction == removedPoint.Direction &&
+                                              Math.Abs(p.Price - removedPoint.Price) < 0.0001);
+
             // Find any orderflow levels that reference this swing point
             var affectedArrays = new List<Level>();
-            
+
             foreach (var array in _pdArrays)
             {
                 bool isAffected = false;
-                
+
                 // Check if this array uses the removed point as one of its key points
                 if (array.Direction == Direction.Up)
                 {
@@ -127,13 +135,13 @@ namespace Zuva.Services
                     else if (array.IndexLow == removedPoint.Index && removedPoint.Direction == Direction.Down)
                         isAffected = true;
                 }
-                
+
                 // Check if this array references the removed point in its swept points
                 if (!isAffected && array.SweptSwingPoints != null)
                 {
                     foreach (var sweptPoint in array.SweptSwingPoints)
                     {
-                        if (sweptPoint.Index == removedPoint.Index && 
+                        if (sweptPoint.Index == removedPoint.Index &&
                             sweptPoint.Direction == removedPoint.Direction &&
                             Math.Abs(sweptPoint.Price - removedPoint.Price) < 0.0001)
                         {
@@ -142,22 +150,22 @@ namespace Zuva.Services
                         }
                     }
                 }
-                
+
                 // If this array is affected, add it to our list
                 if (isAffected)
                     affectedArrays.Add(array);
             }
-            
+
             // Remove affected arrays from our collection
             foreach (var array in affectedArrays)
             {
                 _pdArrays.Remove(array);
-                
+
                 // Remove any gauntlets associated with this array
                 if (array.GauntletFVG != null)
                 {
                     _gauntlets.Remove(array.GauntletFVG);
-                    
+
                     // Remove gauntlet visualization
                     if (_chart != null)
                     {
@@ -165,14 +173,14 @@ namespace Zuva.Services
                         _chart.RemoveObject(gauntletId);
                     }
                 }
-                
+
                 // Clean up visualization
                 if (_chart != null)
                 {
                     // Remove orderflow visualization
                     string ofId = $"of-{array.Direction}-{array.Index}-{array.IndexHigh}-{array.IndexLow}";
                     _chart.RemoveObject(ofId);
-                    
+
                     // Remove liquidity sweep line if present
                     if (array.SweptSwingPoint != null)
                     {
@@ -181,7 +189,7 @@ namespace Zuva.Services
                     }
                 }
             }
-            
+
             // If we removed any arrays, we need to recalculate
             if (affectedArrays.Count > 0)
             {
@@ -189,7 +197,7 @@ namespace Zuva.Services
                 RegenerateOrderFlows();
             }
         }
-        
+
         /// <summary>
         /// Regenerate all orderflow levels based on the current swing point history
         /// </summary>
@@ -197,10 +205,10 @@ namespace Zuva.Services
         {
             // Clear existing order flows
             _pdArrays.Clear();
-            
+
             // Clear existing gauntlets
             _gauntlets.Clear();
-            
+
             // Remove all orderflow visualization
             if (_chart != null)
             {
@@ -216,19 +224,19 @@ namespace Zuva.Services
                     _chart.RemoveObject($"gauntlet-Down-{i}");
                 }
             }
-            
+
             // Sort the history by index to ensure chronological order
             _swingPointHistory.Sort((a, b) => a.Index.CompareTo(b.Index));
-            
+
             // Skip if we don't have enough points
             if (_swingPointHistory.Count < 3)
                 return;
-                
+
             // Process each swing point to recreate order flows
             for (int i = 2; i < _swingPointHistory.Count; i++)
             {
                 var swingPoint = _swingPointHistory[i];
-                
+
                 if (swingPoint.Direction == Direction.Down)
                 {
                     ProcessNewSwingLow(swingPoint);
@@ -302,7 +310,7 @@ namespace Zuva.Services
                 {
                     DrawSweptLiquidityLine(bullishOrderFlow);
                 }
-                
+
                 // Draw gauntlet if it exists and visualization is enabled
                 if (bullishOrderFlow.GauntletFVG != null && _showGauntlet)
                 {
@@ -373,7 +381,7 @@ namespace Zuva.Services
                 {
                     DrawSweptLiquidityLine(bearishOrderFlow);
                 }
-                
+
                 // Draw gauntlet if it exists and visualization is enabled
                 if (bearishOrderFlow.GauntletFVG != null && _showGauntlet)
                 {
@@ -427,10 +435,12 @@ namespace Zuva.Services
                 // Set the extreme point as the primary swept point for visualization
                 orderflow.SweptSwingPoint = highestSweptPoint;
 
+                DetectCISDLevel(orderflow);
+
                 // Add score based on how many sweep points were triggered
                 // More points = higher score
                 orderflow.Score += Math.Min(3, sweptHighs.Count); // Cap at 3 for scoring
-                
+
                 // Check for Gauntlet pattern after finding the sweeping candle
                 CheckForGauntlet(orderflow, sweepingCandleIndex);
             }
@@ -481,10 +491,12 @@ namespace Zuva.Services
                 // Set the extreme point as the primary swept point for visualization
                 orderflow.SweptSwingPoint = lowestSweptPoint;
 
+                DetectCISDLevel(orderflow);
+
                 // Add score based on how many sweep points were triggered
                 // More points = higher score
                 orderflow.Score += Math.Min(3, sweptLows.Count); // Cap at 3 for scoring
-                
+
                 // Check for Gauntlet pattern after finding the sweeping candle
                 CheckForGauntlet(orderflow, sweepingCandleIndex);
             }
@@ -499,82 +511,82 @@ namespace Zuva.Services
             // Skip if no FVG detector available or index is invalid
             if (_fvgDetector == null || sweepingCandleIndex < 1 || sweepingCandleIndex >= Bars.Count)
                 return;
-                
+
             // Skip if the orderflow doesn't have swept liquidity
             if (orderflow.SweptSwingPoint == null)
                 return;
-                
+
             // Get all FVGs from the detector
             var allFvgs = _fvgDetector.GetAllFVGs();
             if (allFvgs == null || allFvgs.Count == 0)
                 return;
-            
+
             // First, find the last FVG within the orderflow
             var gauntletFVG = FindLastFVGInOrderflow(orderflow, allFvgs);
-            
+
             // If we found a matching FVG, check if the sweeping candle is part of it
             if (gauntletFVG != null)
             {
                 // Check if the sweeping candle is either the second or third candle of the FVG
                 bool isSweepingCandlePartOfFVG = false;
-                
+
                 if (orderflow.Direction == Direction.Up)
                 {
                     // For bullish FVGs, check if sweeping candle is either IndexMid or IndexHigh
-                    isSweepingCandlePartOfFVG = 
-                        sweepingCandleIndex == gauntletFVG.IndexMid || 
+                    isSweepingCandlePartOfFVG =
+                        sweepingCandleIndex == gauntletFVG.IndexMid ||
                         sweepingCandleIndex == gauntletFVG.IndexHigh;
                 }
                 else // Direction.Down
                 {
                     // For bearish FVGs, check if sweeping candle is either IndexMid or IndexLow
-                    isSweepingCandlePartOfFVG = 
-                        sweepingCandleIndex == gauntletFVG.IndexMid || 
+                    isSweepingCandlePartOfFVG =
+                        sweepingCandleIndex == gauntletFVG.IndexMid ||
                         sweepingCandleIndex == gauntletFVG.IndexLow;
                 }
-                
+
                 // If the sweeping candle is part of the FVG, mark it as a Gauntlet
                 if (isSweepingCandlePartOfFVG)
                 {
                     // Mark the FVG as a Gauntlet
                     gauntletFVG.IsGauntlet = true;
-                    
+
                     // Associate it with the orderflow
                     orderflow.GauntletFVG = gauntletFVG;
-                    
+
                     // Add to our collection of Gauntlets if not already present
-                    if (!_gauntlets.Any(g => g.Index == gauntletFVG.Index && 
-                                        g.Direction == gauntletFVG.Direction))
+                    if (!_gauntlets.Any(g => g.Index == gauntletFVG.Index &&
+                                             g.Direction == gauntletFVG.Direction))
                     {
                         _gauntlets.Add(gauntletFVG);
                     }
-                    
+
                     // Draw it if visualization is enabled
                     if (_showGauntlet)
                     {
                         DrawGauntlet(gauntletFVG);
                     }
-                    
+
                     // Exit early - we found our Gauntlet
                     return;
                 }
             }
-            
+
             // If we couldn't find a matching FVG from the detector, 
             // try to detect an FVG pattern directly
             gauntletFVG = DetectFVGPatternInOrderflow(orderflow, sweepingCandleIndex);
-            
+
             if (gauntletFVG != null)
             {
                 // Mark as Gauntlet
                 gauntletFVG.IsGauntlet = true;
-                
+
                 // Associate with orderflow
                 orderflow.GauntletFVG = gauntletFVG;
-                
+
                 // Add to Gauntlets collection
                 _gauntlets.Add(gauntletFVG);
-                
+
                 // Draw if visualization is enabled
                 if (_showGauntlet)
                 {
@@ -582,7 +594,7 @@ namespace Zuva.Services
                 }
             }
         }
-        
+
         /// <summary>
         /// Finds the last (most recent) FVG contained within an orderflow's boundaries
         /// </summary>
@@ -591,14 +603,12 @@ namespace Zuva.Services
             // Define the price and time boundaries of the orderflow
             double lowPrice = orderflow.Low;
             double highPrice = orderflow.High;
-            DateTime earliestTime = orderflow.Direction == Direction.Up ? 
-                                   orderflow.LowTime : orderflow.HighTime;
-            DateTime latestTime = orderflow.Direction == Direction.Up ? 
-                                 orderflow.HighTime : orderflow.LowTime;
-            
+            DateTime earliestTime = orderflow.Direction == Direction.Up ? orderflow.LowTime : orderflow.HighTime;
+            DateTime latestTime = orderflow.Direction == Direction.Up ? orderflow.HighTime : orderflow.LowTime;
+
             // Filter FVGs that have the same direction as the orderflow and are contained within its boundaries
             var matchingFvgs = allFvgs
-                .Where(fvg => 
+                .Where(fvg =>
                     // Same direction
                     fvg.Direction == orderflow.Direction &&
                     // Within price boundaries (at least partially)
@@ -608,11 +618,11 @@ namespace Zuva.Services
                 // Sort by index (descending) to get the most recent first
                 .OrderByDescending(fvg => fvg.Index)
                 .ToList();
-            
+
             // Return the most recent FVG if any were found
             return matchingFvgs.FirstOrDefault();
         }
-        
+
         /// <summary>
         /// Detects an FVG pattern directly from the price action within the orderflow boundaries
         /// </summary>
@@ -621,21 +631,21 @@ namespace Zuva.Services
             // Define the index range within the orderflow
             int startIndex = Math.Min(orderflow.IndexLow, orderflow.IndexHigh);
             int endIndex = Math.Max(orderflow.IndexLow, orderflow.IndexHigh);
-            
+
             // Check if the sweeping candle is within the orderflow
             if (sweepingCandleIndex < startIndex || sweepingCandleIndex > endIndex)
                 return null;
-            
+
             // Try to detect an FVG with the sweeping candle as either the second or third candle
-            
+
             // Case 1: Sweeping candle as the third candle
             if (sweepingCandleIndex >= startIndex + 2 && sweepingCandleIndex <= endIndex)
             {
                 // Get the three consecutive bars
                 var bar1 = Bars[sweepingCandleIndex - 2]; // First candle
                 var bar2 = Bars[sweepingCandleIndex - 1]; // Middle candle
-                var bar3 = Bars[sweepingCandleIndex];     // Sweeping candle (third candle)
-                
+                var bar3 = Bars[sweepingCandleIndex]; // Sweeping candle (third candle)
+
                 // Check for valid FVG pattern
                 if (orderflow.Direction == Direction.Up && bar1.High < bar3.Low)
                 {
@@ -674,15 +684,15 @@ namespace Zuva.Services
                     );
                 }
             }
-            
+
             // Case 2: Sweeping candle as the second candle
             if (sweepingCandleIndex >= startIndex + 1 && sweepingCandleIndex < endIndex)
             {
                 // Get the three consecutive bars
                 var bar1 = Bars[sweepingCandleIndex - 1]; // First candle
-                var bar2 = Bars[sweepingCandleIndex];     // Sweeping candle (second candle)
+                var bar2 = Bars[sweepingCandleIndex]; // Sweeping candle (second candle)
                 var bar3 = Bars[sweepingCandleIndex + 1]; // Third candle
-                
+
                 // Check for valid FVG pattern
                 if (orderflow.Direction == Direction.Up && bar1.High < bar3.Low)
                 {
@@ -721,10 +731,10 @@ namespace Zuva.Services
                     );
                 }
             }
-            
+
             return null;
         }
-        
+
         /// <summary>
         /// Finds the most relevant FVG where the sweeping candle is either the second or third candle,
         /// prioritizing the third candle of the FVG pattern
@@ -734,13 +744,13 @@ namespace Zuva.Services
             // First, try to find FVGs where the sweeping candle is the third candle (most significant)
             Level thirdCandleMatch = null;
             Level secondCandleMatch = null;
-            
+
             // Sort FVGs by Index (descending) to get the most recent ones first
             var sortedFvgs = allFvgs
                 .Where(fvg => fvg.Direction == orderflow.Direction)
                 .OrderByDescending(fvg => fvg.Index)
                 .ToList();
-            
+
             foreach (var fvg in sortedFvgs)
             {
                 if (orderflow.Direction == Direction.Up)
@@ -774,11 +784,11 @@ namespace Zuva.Services
                     }
                 }
             }
-            
+
             // Return the third candle match if found, otherwise return the second candle match
             return thirdCandleMatch ?? secondCandleMatch;
         }
-        
+
         /// <summary>
         /// Detects an FVG pattern directly from the price action if not found in the FVG detector,
         /// prioritizing patterns where the sweeping candle is the third candle
@@ -789,11 +799,11 @@ namespace Zuva.Services
             Level thirdCandlePattern = DetectThirdCandleFVGPattern(orderflow, sweepingCandleIndex);
             if (thirdCandlePattern != null)
                 return thirdCandlePattern;
-                
+
             // If not found, fall back to detecting an FVG with the sweeping candle as the second candle
             return DetectSecondCandleFVGPattern(orderflow, sweepingCandleIndex);
         }
-        
+
         /// <summary>
         /// Detects an FVG pattern where the sweeping candle is the third candle
         /// </summary>
@@ -802,12 +812,12 @@ namespace Zuva.Services
             // We need at least 3 candles to detect an FVG
             if (sweepingCandleIndex < 2)
                 return null;
-                
+
             // Get the three consecutive bars with sweeping candle as the third
             var bar1 = Bars[sweepingCandleIndex - 2]; // First candle
             var bar2 = Bars[sweepingCandleIndex - 1]; // Middle candle
-            var bar3 = Bars[sweepingCandleIndex];     // Sweeping candle (Third candle)
-            
+            var bar3 = Bars[sweepingCandleIndex]; // Sweeping candle (Third candle)
+
             // Check for bullish FVG pattern (bar1's high is lower than bar3's low)
             if (bar1.High < bar3.Low && orderflow.Direction == Direction.Up)
             {
@@ -820,10 +830,10 @@ namespace Zuva.Services
                     bar3.OpenTime,
                     bar2.OpenTime,
                     Direction.Up,
-                    sweepingCandleIndex - 2,  // Index is first candle
-                    sweepingCandleIndex,      // IndexHigh is third candle (sweeping candle)
-                    sweepingCandleIndex - 2,  // IndexLow is first candle
-                    sweepingCandleIndex - 1,  // IndexMid is second candle
+                    sweepingCandleIndex - 2, // Index is first candle
+                    sweepingCandleIndex, // IndexHigh is third candle (sweeping candle)
+                    sweepingCandleIndex - 2, // IndexLow is first candle
+                    sweepingCandleIndex - 1, // IndexMid is second candle
                     Zone.Premium
                 );
             }
@@ -839,17 +849,17 @@ namespace Zuva.Services
                     bar1.OpenTime,
                     bar2.OpenTime,
                     Direction.Down,
-                    sweepingCandleIndex - 2,  // Index is first candle
-                    sweepingCandleIndex - 2,  // IndexHigh is first candle
-                    sweepingCandleIndex,      // IndexLow is third candle (sweeping candle)
-                    sweepingCandleIndex - 1,  // IndexMid is second candle
+                    sweepingCandleIndex - 2, // Index is first candle
+                    sweepingCandleIndex - 2, // IndexHigh is first candle
+                    sweepingCandleIndex, // IndexLow is third candle (sweeping candle)
+                    sweepingCandleIndex - 1, // IndexMid is second candle
                     Zone.Discount
                 );
             }
-            
+
             return null;
         }
-        
+
         /// <summary>
         /// Detects an FVG pattern where the sweeping candle is the second candle
         /// </summary>
@@ -858,12 +868,12 @@ namespace Zuva.Services
             // We need to have available bars for all three candles
             if (sweepingCandleIndex < 1 || sweepingCandleIndex + 1 >= Bars.Count)
                 return null;
-                
+
             // Get the three consecutive bars with sweeping candle as the second
             var bar1 = Bars[sweepingCandleIndex - 1]; // First candle
-            var bar2 = Bars[sweepingCandleIndex];     // Sweeping candle (Second candle)
+            var bar2 = Bars[sweepingCandleIndex]; // Sweeping candle (Second candle)
             var bar3 = Bars[sweepingCandleIndex + 1]; // Third candle
-            
+
             // Check for bullish FVG pattern (bar1's high is lower than bar3's low)
             if (bar1.High < bar3.Low && orderflow.Direction == Direction.Up)
             {
@@ -876,10 +886,10 @@ namespace Zuva.Services
                     bar3.OpenTime,
                     bar2.OpenTime,
                     Direction.Up,
-                    sweepingCandleIndex - 1,  // Index is first candle
-                    sweepingCandleIndex + 1,  // IndexHigh is third candle
-                    sweepingCandleIndex - 1,  // IndexLow is first candle
-                    sweepingCandleIndex,      // IndexMid is second candle (sweeping candle)
+                    sweepingCandleIndex - 1, // Index is first candle
+                    sweepingCandleIndex + 1, // IndexHigh is third candle
+                    sweepingCandleIndex - 1, // IndexLow is first candle
+                    sweepingCandleIndex, // IndexMid is second candle (sweeping candle)
                     Zone.Premium
                 );
             }
@@ -895,14 +905,14 @@ namespace Zuva.Services
                     bar1.OpenTime,
                     bar2.OpenTime,
                     Direction.Down,
-                    sweepingCandleIndex - 1,  // Index is first candle
-                    sweepingCandleIndex - 1,  // IndexHigh is first candle
-                    sweepingCandleIndex + 1,  // IndexLow is third candle
-                    sweepingCandleIndex,      // IndexMid is second candle (sweeping candle)
+                    sweepingCandleIndex - 1, // Index is first candle
+                    sweepingCandleIndex - 1, // IndexHigh is first candle
+                    sweepingCandleIndex + 1, // IndexLow is third candle
+                    sweepingCandleIndex, // IndexMid is second candle (sweeping candle)
                     Zone.Discount
                 );
             }
-            
+
             return null;
         }
 
@@ -1011,7 +1021,7 @@ namespace Zuva.Services
             // Draw rectangle with the appropriate color based on direction
             _chart.DrawOrderFlowRectangle(level, id);
         }
-        
+
         /// <summary>
         /// Draws a Gauntlet on the chart using the order block drawing method
         /// </summary>
@@ -1019,18 +1029,308 @@ namespace Zuva.Services
         {
             if (_chart == null)
                 return;
-                
+
             // Create a unique ID for this Gauntlet
             string id = $"gauntlet-{gauntlet.Direction}-{gauntlet.Index}-{gauntlet.IndexHigh}-{gauntlet.IndexLow}";
-            
+
             // Use the existing DrawRectangle method from ChartExtensions
             // but with higher opacity to distinguish from other elements
             _chart.DrawRectangle(
                 gauntlet,
                 id,
-                true,  // Draw midpoint
-                25     // Higher opacity for Gauntlets
+                true, // Draw midpoint
+                25 // Higher opacity for Gauntlets
             );
+        }
+
+        // Detect CISD from orderflow that swept liquidity
+        private void DetectCISDLevel(Level orderflow)
+        {
+            // Skip if CISD visualization is not enabled
+            if (!_showCISD)
+                return;
+
+            // Only process orderflows that swept liquidity
+            if (orderflow.SweptSwingPoint == null)
+                return;
+
+            // Define search range based on direction of the orderflow
+            int startIndex = Math.Min(orderflow.IndexLow, orderflow.IndexHigh);
+            int endIndex = Math.Max(orderflow.IndexLow, orderflow.IndexHigh);
+
+            // Ensure we have valid indices
+            if (startIndex < 0 || endIndex < 0 || startIndex >= Bars.Count || endIndex >= Bars.Count)
+                return;
+
+            if (orderflow.Direction == Direction.Up)
+            {
+                // For bullish orderflow, find a sequence of consecutive bullish candles
+                int firstBullishIndex = -1;
+                int lastBullishIndex = -1;
+
+                // Start from the beginning of the orderflow
+                for (int i = startIndex; i <= endIndex; i++)
+                {
+                    Bar currentBar = Bars[i];
+                    bool isBullish = currentBar.Close > currentBar.Open;
+
+                    if (isBullish)
+                    {
+                        if (firstBullishIndex == -1)
+                        {
+                            // Found first bullish candle
+                            firstBullishIndex = i;
+                        }
+
+                        // Update the last bullish candle index
+                        lastBullishIndex = i;
+                    }
+                    else if (firstBullishIndex != -1)
+                    {
+                        // Break the sequence on bearish candle
+                        break;
+                    }
+                }
+
+                // If we found at least one bullish candle, create a CISD level
+                if (firstBullishIndex >= 0 && lastBullishIndex >= 0)
+                {
+                    // Create a bullish CISD level - using first candle's open as low and last candle's close as high
+                    var cisdLevel = new Level(
+                        LevelType.CISD,
+                        Bars[firstBullishIndex].Open, // Low is the opening price of first bullish candle
+                        Bars[lastBullishIndex].Close, // High is the closing price of last bullish candle
+                        Bars[firstBullishIndex].OpenTime,
+                        Bars[lastBullishIndex].OpenTime,
+                        null,
+                        Direction.Up,
+                        firstBullishIndex,
+                        lastBullishIndex,
+                        firstBullishIndex
+                    );
+
+                    // Associate with orderflow
+                    orderflow.CISDLevel = cisdLevel;
+
+                    // Add to CISD collection
+                    _cisdLevels.Add(cisdLevel);
+                }
+            }
+            else // Direction.Down
+            {
+                // For bearish orderflow, find a sequence of consecutive bearish candles
+                int firstBearishIndex = -1;
+                int lastBearishIndex = -1;
+
+                // Start from the beginning of the orderflow
+                for (int i = startIndex; i <= endIndex; i++)
+                {
+                    Bar currentBar = Bars[i];
+                    bool isBearish = currentBar.Close < currentBar.Open;
+
+                    if (isBearish)
+                    {
+                        if (firstBearishIndex == -1)
+                        {
+                            // Found first bearish candle
+                            firstBearishIndex = i;
+                        }
+
+                        // Update the last bearish candle index
+                        lastBearishIndex = i;
+                    }
+                    else if (firstBearishIndex != -1)
+                    {
+                        // Break the sequence on bullish candle
+                        break;
+                    }
+                }
+
+                // If we found at least one bearish candle, create a CISD level
+                if (firstBearishIndex >= 0 && lastBearishIndex >= 0)
+                {
+                    // Create a bearish CISD level - using first candle's open as high and last candle's close as low
+                    var cisdLevel = new Level(
+                        LevelType.CISD,
+                        Bars[lastBearishIndex].Close, // Low is the closing price of last bearish candle
+                        Bars[firstBearishIndex].Open, // High is the opening price of first bearish candle
+                        Bars[lastBearishIndex].OpenTime,
+                        Bars[firstBearishIndex].OpenTime,
+                        null,
+                        Direction.Down,
+                        firstBearishIndex,
+                        firstBearishIndex,
+                        lastBearishIndex
+                    );
+
+                    // Associate with orderflow
+                    orderflow.CISDLevel = cisdLevel;
+
+                    // Add to CISD collection
+                    _cisdLevels.Add(cisdLevel);
+                }
+            }
+        }
+
+// Check for CISD confirmation and activation
+        private void CheckCISDActivity(SwingPoint swingPoint, int currentIndex)
+        {
+            if (!_showCISD)
+                return;
+
+            // Get all CISD levels that are not yet confirmed
+            var pendingCisdLevels = _cisdLevels
+                .Where(cisd => !cisd.IsConfirmed)
+                .ToList();
+
+            // Check for CISD confirmation
+            foreach (var cisd in pendingCisdLevels)
+            {
+                if (cisd.Direction == Direction.Up)
+                {
+                    // Bullish CISD is confirmed when a bearish candle closes below the CISD level (low)
+                    if (swingPoint.CandleDirection == Direction.Down &&
+                        swingPoint.Bar.Close < cisd.Low)
+                    {
+                        cisd.IsConfirmed = true;
+
+                        // Draw a confirmation line
+                        if (_chart != null)
+                        {
+                            string confirmId = $"cisd-confirm-{cisd.Direction}-{cisd.Index}-{swingPoint.Index}";
+                            _chart.DrawStraightLine(
+                                confirmId,
+                                cisd.LowTime,
+                                cisd.Low,
+                                swingPoint.Time,
+                                cisd.Low,
+                                null,
+                                LineStyle.Dots,
+                                Color.Pink,
+                                false,
+                                true,
+                                false
+                            );
+                        }
+                    }
+                }
+                else // Direction.Down
+                {
+                    // Bearish CISD is confirmed when a bullish candle closes above the CISD level (high)
+                    if (swingPoint.CandleDirection == Direction.Up &&
+                        swingPoint.Bar.Close > cisd.High)
+                    {
+                        cisd.IsConfirmed = true;
+
+                        // Draw a confirmation line
+                        if (_chart != null)
+                        {
+                            string confirmId = $"cisd-confirm-{cisd.Direction}-{cisd.Index}-{swingPoint.Index}";
+                            _chart.DrawStraightLine(
+                                confirmId,
+                                cisd.HighTime,
+                                cisd.High,
+                                swingPoint.Time,
+                                cisd.High,
+                                null,
+                                LineStyle.Dots,
+                                Color.Pink,
+                                false,
+                                true,
+                                false
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Get all CISD levels that are confirmed but not activated
+            var confirmedCisdLevels = _cisdLevels
+                .Where(cisd => cisd.IsConfirmed && !cisd.Activated)
+                .ToList();
+
+            // Check for CISD activation
+            foreach (var cisd in confirmedCisdLevels)
+            {
+                if (cisd.Direction == Direction.Up)
+                {
+                    // Bullish CISD is activated when a bullish swing point's price moves above the CISD level (low)
+                    if (swingPoint.Direction == Direction.Up &&
+                        swingPoint.Price > cisd.Low)
+                    {
+                        cisd.Activated = true;
+
+                        // Draw a CISD activation line
+                        DrawCISDLine(cisd, swingPoint);
+
+                        // Update swing point
+                        swingPoint.ActivatedCISD = true;
+                        swingPoint.ActivatedCISDLevel = cisd;
+                    }
+                }
+                else // Direction.Down
+                {
+                    // Bearish CISD is activated when a bearish swing point's price moves below the CISD level (high)
+                    if (swingPoint.Direction == Direction.Down &&
+                        swingPoint.Price < cisd.High)
+                    {
+                        cisd.Activated = true;
+
+                        // Draw a CISD activation line
+                        DrawCISDLine(cisd, swingPoint);
+
+                        // Update swing point
+                        swingPoint.ActivatedCISD = true;
+                        swingPoint.ActivatedCISDLevel = cisd;
+                    }
+                }
+            }
+        }
+
+// Replace the incorrect DrawCISDLine method with this corrected version
+        private void DrawCISDLine(Level cisdLevel, SwingPoint activatingPoint)
+        {
+            if (_chart == null)
+                return;
+
+            // Create a unique ID for this CISD line
+            string id = $"cisd-{cisdLevel.Direction}-{cisdLevel.Index}-{activatingPoint.Index}";
+    
+            double priceLevel = cisdLevel.Direction == Direction.Up ? cisdLevel.Low : cisdLevel.High;
+            DateTime startTime = cisdLevel.Direction == Direction.Up ? cisdLevel.LowTime : cisdLevel.HighTime;
+    
+            // Draw a horizontal line from CISD level to activating point
+            _chart.DrawStraightLine(
+                id,
+                startTime,
+                priceLevel,
+                activatingPoint.Time,
+                priceLevel,
+                null,  // No label
+                LineStyle.Solid,
+                Color.Pink,
+                false,  // No label displayed
+                true,   // Remove existing
+                false   // Not extended
+            );
+        }
+
+// Add method to get all CISD levels
+        public List<Level> GetAllCISDLevels()
+        {
+            return _cisdLevels;
+        }
+
+// Add method to get active CISD levels
+        public List<Level> GetActiveCISDLevels()
+        {
+            return _cisdLevels.Where(cisd => cisd.Activated).ToList();
+        }
+
+// Add method to get confirmed CISD levels
+        public List<Level> GetConfirmedCISDLevels()
+        {
+            return _cisdLevels.Where(cisd => cisd.IsConfirmed).ToList();
         }
 
         /// <summary>
@@ -1084,7 +1384,7 @@ namespace Zuva.Services
         {
             return _pdArrays.Where(l => l.SweptSwingPoint != null).ToList();
         }
-        
+
         /// <summary>
         /// Gets all Gauntlets
         /// </summary>
@@ -1092,7 +1392,7 @@ namespace Zuva.Services
         {
             return _gauntlets;
         }
-        
+
         /// <summary>
         /// Gets all Gauntlets that match the given direction
         /// </summary>

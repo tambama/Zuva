@@ -45,6 +45,8 @@ public class SwingPoint
     // References to the activated levels
     public Level ActivatedFVGLevel { get; set; }
     public Level ActivatedOrderBlockLevel { get; set; }
+    public bool ActivatedCISD { get; set; }
+    public Level ActivatedCISDLevel { get; set; }
     
     // Score
     public int Score

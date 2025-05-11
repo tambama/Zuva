@@ -44,6 +44,7 @@ public class Level
     public DateTime? StretchTo { get; set; }
     public double? Entry { get; set; }
     
+    
     // Properties for liquidity sweep tracking
     public SwingPoint SweptSwingPoint { get; set; } // The extreme swept swing point
     public List<SwingPoint> SweptSwingPoints { get; set; } = new List<SwingPoint>(); // All swept swing points
@@ -53,4 +54,7 @@ public class Level
     // Properties for Gauntlet tracking
     public bool IsGauntlet { get; set; }
     public Level GauntletFVG { get; set; }
+    
+    // CISD
+    public Level CISDLevel { get; set; }
 }
