@@ -2,7 +2,7 @@ namespace Zuva.Models;
 
 public class Level
 {
-    public Level(LevelType levelType, double low, double high, DateTime lowTime, DateTime highTime, DateTime? midTime = null, Direction direction = Direction.Up, int index = 0, int indexHigh = 0, int indexLow = 0, Zone zone = Zone.Equilibrium, int score = 1, DateTime? stretchTo = null, bool isConfirmed = true, double? entry = 0)
+    public Level(LevelType levelType, double low, double high, DateTime lowTime, DateTime highTime, DateTime? midTime = null, Direction direction = Direction.Up, int index = 0, int indexHigh = 0, int indexLow = 0, int indexMid = 0, Zone zone = Zone.Equilibrium, int score = 1, DateTime? stretchTo = null, bool isConfirmed = true, double? entry = 0)
     {
         LevelType = levelType;
         Low = low;
@@ -14,6 +14,7 @@ public class Level
         Index = index;
         IndexHigh = indexHigh;
         IndexLow = indexLow;
+        IndexMid = indexMid;
         Zone = zone;
         Score = score;
         StretchTo = stretchTo;
@@ -34,6 +35,7 @@ public class Level
     public int Index { get; set; }
     public int IndexHigh { get; set; }
     public int IndexLow { get; set; }
+    public int IndexMid { get; set; } // Added to track the middle candle
     public int Score { get; set; }
     public bool Activated { get; set; }
     public bool IsInverted { get; set; }
@@ -47,4 +49,8 @@ public class Level
     public List<SwingPoint> SweptSwingPoints { get; set; } = new List<SwingPoint>(); // All swept swing points
     public int IndexOfSweepingCandle { get; set; }
     public int SweptCount => SweptSwingPoints?.Count ?? 0;
+    
+    // Properties for Gauntlet tracking
+    public bool IsGauntlet { get; set; }
+    public Level GauntletFVG { get; set; }
 }

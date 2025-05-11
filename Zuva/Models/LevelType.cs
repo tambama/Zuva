@@ -21,5 +21,7 @@ public enum LevelType
     [Description("Unicorn")]
     Unicorn,
     [Description("CISD")]
-    CISD
+    CISD,
+    [Description("Gauntlet")]
+    Gauntlet
 }

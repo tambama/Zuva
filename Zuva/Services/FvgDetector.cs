@@ -67,6 +67,7 @@ namespace Zuva.Services
                     currentIndex - 2,
                     currentIndex,
                     currentIndex - 2,
+                    currentIndex - 1, // Store the middle candle index for Gauntlet detection
                     Zone.Premium  // FVGs in an uptrend are typically in the Premium zone
                 );
                 
@@ -148,6 +149,7 @@ namespace Zuva.Services
                     currentIndex - 2,
                     currentIndex - 2,
                     currentIndex,
+                    currentIndex - 1, // Store the middle candle index for Gauntlet detection
                     Zone.Discount  // FVGs in a downtrend are typically in the Discount zone
                 );
                 
@@ -219,8 +221,7 @@ namespace Zuva.Services
                 Direction.Up,
                 index,
                 index,
-                index,
-                Zone.Premium
+                index
             );
             
             // Check if we already have this order block to avoid duplicates
@@ -254,8 +255,7 @@ namespace Zuva.Services
                 Direction.Down,
                 index,
                 index,
-                index,
-                Zone.Discount
+                index
             );
             
             // Check if we already have this order block to avoid duplicates

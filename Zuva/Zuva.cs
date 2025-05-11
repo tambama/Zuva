@@ -37,6 +37,9 @@ namespace Zuva
         
         [Parameter("Show Order Blocks", Group = "PD Arrays", DefaultValue = true)]
         public bool ShowOrderBlock { get; set; }
+        [Parameter("Show Gauntlets", Group = "PD Arrays", DefaultValue = false)]
+        public bool ShowGauntlet { get; set; }
+        
         [Parameter("Show Liquidity Sweeps", Group = "Liquidity", DefaultValue = true)]
         public bool ShowLiquiditySweep { get; set; }
 
@@ -111,10 +114,30 @@ namespace Zuva
 
             _highTimeFrame = HTF.GetTimeFrameFromString();
 
+            // Initialize FVG detector with order block support
+            try
+            {
+                _fvgDetector = new FvgDetector(Chart, ShowFVG, ShowOrderBlock, _swingDetector);
+            }
+            catch (Exception ex)
+            {
+                Print("Error initializing FVG Detector: " + ex.Message);
+                // Disable to prevent further errors
+                ShowFVG = false;
+                ShowOrderBlock = false;
+            }
+
             // Initialize PD Array analyzer
             try
             {
-                _pdArrayAnalyzer = new PdArrayAnalyzer(Chart, Bars, ShowOrderFlow, ShowLiquiditySweep);
+                _pdArrayAnalyzer = new PdArrayAnalyzer(
+                    Chart, 
+                    Bars, 
+                    ShowOrderFlow, 
+                    ShowLiquiditySweep, 
+                    ShowGauntlet,
+                    _fvgDetector,
+                    message => Print(message));  // Pass the FVG detector reference
             }
             catch (Exception ex)
             {
@@ -122,6 +145,7 @@ namespace Zuva
                 // Disable to prevent further errors
                 ShowOrderFlow = false;
                 ShowLiquiditySweep = false;
+                ShowGauntlet = false;
             }
 
             // Initialize market structure analyzer if enabled
@@ -145,19 +169,6 @@ namespace Zuva
                 Print("Error initializing Market Structure Analyzer: " + ex.Message);
                 // Disable to prevent further errors
                 ShowMarketStructure = false;
-            }
-            
-            // Initialize FVG detector with order block support
-            try
-            {
-                _fvgDetector = new FvgDetector(Chart, ShowFVG, ShowOrderBlock, _swingDetector);
-            }
-            catch (Exception ex)
-            {
-                Print("Error initializing FVG Detector: " + ex.Message);
-                // Disable to prevent further errors
-                ShowFVG = false;
-                ShowOrderBlock = false;
             }
         }
 
@@ -435,6 +446,26 @@ namespace Zuva
             }
     
             return sweptPoints;
+        }
+        
+        // Get all Gauntlets
+        public List<Level> GetGauntlets()
+        {
+            return _pdArrayAnalyzer?.GetGauntlets() ?? new List<Level>();
+        }
+        
+        // Get Gauntlets by direction
+        public List<Level> GetGauntlets(Direction direction)
+        {
+            return _pdArrayAnalyzer?.GetGauntlets(direction) ?? new List<Level>();
+        }
+        
+        // Get the most recent Gauntlet by direction
+        public Level GetLastGauntlet(Direction direction)
+        {
+            return _pdArrayAnalyzer?.GetGauntlets(direction)
+                .OrderByDescending(g => g.Index)
+                .FirstOrDefault();
         }
         
         // Add this method to handle swing point removal events

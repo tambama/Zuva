@@ -7,5 +7,6 @@ public class Permissions
     public bool ShowOrderFlow { get; set; }
     public bool ShowUnicorn { get; set; }
     public bool ShowCISD { get; set; }
-    public bool ShowLiquiditySweep { get; set; } // Added property for liquidity sweep visibility
+    public bool ShowLiquiditySweep { get; set; }
+    public bool ShowGauntlet { get; set; } // Added property for gauntlet visibility
 }

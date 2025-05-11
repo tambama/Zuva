@@ -4,6 +4,7 @@ using System.Linq;
 using cAlgo.API;
 using Mwenje.Extensions;
 using Zuva.Models;
+using Zuva.Services;
 
 namespace Zuva.Services
 {
@@ -12,6 +13,9 @@ namespace Zuva.Services
     /// </summary>
     public class PdArrayAnalyzer
     {
+        // Add a delegate for logging
+        private readonly Action<string> _logger;
+        
         // Collection to store all order flow levels
         private readonly List<Level> _pdArrays = new List<Level>();
 
@@ -26,6 +30,15 @@ namespace Zuva.Services
 
         // Flag to control liquidity sweep visualization
         private readonly bool _showLiquiditySweep;
+        
+        // Flag to control gauntlet visualization
+        private readonly bool _showGauntlet;
+
+        // Collection to store all gauntlet levels
+        private readonly List<Level> _gauntlets = new List<Level>();
+        
+        // Reference to FVG detector for finding FVGs
+        private readonly FvgDetector _fvgDetector;
 
         // Reference to bars for finding specific candles
         private Bars Bars;
@@ -33,12 +46,22 @@ namespace Zuva.Services
         /// <summary>
         /// Creates a new instance of the PD Array Analyzer
         /// </summary>
-        public PdArrayAnalyzer(Chart chart, Bars bars, bool showOrderFlow = false, bool showLiquiditySweep = false)
+        public PdArrayAnalyzer(
+            Chart chart, 
+            Bars bars, 
+            bool showOrderFlow = false, 
+            bool showLiquiditySweep = false, 
+            bool showGauntlet = false,
+            FvgDetector fvgDetector = null,
+            Action<string> logger = null)
         {
             _chart = chart;
             Bars = bars;
             _showOrderFlow = showOrderFlow;
             _showLiquiditySweep = showLiquiditySweep;
+            _showGauntlet = showGauntlet;
+            _fvgDetector = fvgDetector;
+            _logger = logger ?? (_ => { });
         }
 
         /// <summary>
@@ -77,8 +100,8 @@ namespace Zuva.Services
             
             // Remove the swing point from our history
             _swingPointHistory.RemoveAll(p => p.Index == removedPoint.Index && 
-                                            p.Direction == removedPoint.Direction && 
-                                            Math.Abs(p.Price - removedPoint.Price) < 0.0001);
+                                           p.Direction == removedPoint.Direction && 
+                                           Math.Abs(p.Price - removedPoint.Price) < 0.0001);
             
             // Find any orderflow levels that reference this swing point
             var affectedArrays = new List<Level>();
@@ -130,6 +153,19 @@ namespace Zuva.Services
             {
                 _pdArrays.Remove(array);
                 
+                // Remove any gauntlets associated with this array
+                if (array.GauntletFVG != null)
+                {
+                    _gauntlets.Remove(array.GauntletFVG);
+                    
+                    // Remove gauntlet visualization
+                    if (_chart != null)
+                    {
+                        string gauntletId = $"gauntlet-{array.GauntletFVG.Direction}-{array.GauntletFVG.Index}";
+                        _chart.RemoveObject(gauntletId);
+                    }
+                }
+                
                 // Clean up visualization
                 if (_chart != null)
                 {
@@ -162,6 +198,9 @@ namespace Zuva.Services
             // Clear existing order flows
             _pdArrays.Clear();
             
+            // Clear existing gauntlets
+            _gauntlets.Clear();
+            
             // Remove all orderflow visualization
             if (_chart != null)
             {
@@ -173,6 +212,8 @@ namespace Zuva.Services
                     _chart.RemoveObject($"of-Down-{i}");
                     _chart.RemoveObject($"swept-Up-{i}");
                     _chart.RemoveObject($"swept-Down-{i}");
+                    _chart.RemoveObject($"gauntlet-Up-{i}");
+                    _chart.RemoveObject($"gauntlet-Down-{i}");
                 }
             }
             
@@ -261,6 +302,12 @@ namespace Zuva.Services
                 {
                     DrawSweptLiquidityLine(bullishOrderFlow);
                 }
+                
+                // Draw gauntlet if it exists and visualization is enabled
+                if (bullishOrderFlow.GauntletFVG != null && _showGauntlet)
+                {
+                    DrawGauntlet(bullishOrderFlow.GauntletFVG);
+                }
             }
         }
 
@@ -326,6 +373,12 @@ namespace Zuva.Services
                 {
                     DrawSweptLiquidityLine(bearishOrderFlow);
                 }
+                
+                // Draw gauntlet if it exists and visualization is enabled
+                if (bearishOrderFlow.GauntletFVG != null && _showGauntlet)
+                {
+                    DrawGauntlet(bearishOrderFlow.GauntletFVG);
+                }
             }
         }
 
@@ -377,6 +430,9 @@ namespace Zuva.Services
                 // Add score based on how many sweep points were triggered
                 // More points = higher score
                 orderflow.Score += Math.Min(3, sweptHighs.Count); // Cap at 3 for scoring
+                
+                // Check for Gauntlet pattern after finding the sweeping candle
+                CheckForGauntlet(orderflow, sweepingCandleIndex);
             }
         }
 
@@ -428,7 +484,426 @@ namespace Zuva.Services
                 // Add score based on how many sweep points were triggered
                 // More points = higher score
                 orderflow.Score += Math.Min(3, sweptLows.Count); // Cap at 3 for scoring
+                
+                // Check for Gauntlet pattern after finding the sweeping candle
+                CheckForGauntlet(orderflow, sweepingCandleIndex);
             }
+        }
+
+        /// <summary>
+        /// Checks if the sweeping candle is part of an FVG pattern to detect Gauntlets
+        /// by first finding the last FVG within the orderflow
+        /// </summary>
+        private void CheckForGauntlet(Level orderflow, int sweepingCandleIndex)
+        {
+            // Skip if no FVG detector available or index is invalid
+            if (_fvgDetector == null || sweepingCandleIndex < 1 || sweepingCandleIndex >= Bars.Count)
+                return;
+                
+            // Skip if the orderflow doesn't have swept liquidity
+            if (orderflow.SweptSwingPoint == null)
+                return;
+                
+            // Get all FVGs from the detector
+            var allFvgs = _fvgDetector.GetAllFVGs();
+            if (allFvgs == null || allFvgs.Count == 0)
+                return;
+            
+            // First, find the last FVG within the orderflow
+            var gauntletFVG = FindLastFVGInOrderflow(orderflow, allFvgs);
+            
+            // If we found a matching FVG, check if the sweeping candle is part of it
+            if (gauntletFVG != null)
+            {
+                // Check if the sweeping candle is either the second or third candle of the FVG
+                bool isSweepingCandlePartOfFVG = false;
+                
+                if (orderflow.Direction == Direction.Up)
+                {
+                    // For bullish FVGs, check if sweeping candle is either IndexMid or IndexHigh
+                    isSweepingCandlePartOfFVG = 
+                        sweepingCandleIndex == gauntletFVG.IndexMid || 
+                        sweepingCandleIndex == gauntletFVG.IndexHigh;
+                }
+                else // Direction.Down
+                {
+                    // For bearish FVGs, check if sweeping candle is either IndexMid or IndexLow
+                    isSweepingCandlePartOfFVG = 
+                        sweepingCandleIndex == gauntletFVG.IndexMid || 
+                        sweepingCandleIndex == gauntletFVG.IndexLow;
+                }
+                
+                // If the sweeping candle is part of the FVG, mark it as a Gauntlet
+                if (isSweepingCandlePartOfFVG)
+                {
+                    // Mark the FVG as a Gauntlet
+                    gauntletFVG.IsGauntlet = true;
+                    
+                    // Associate it with the orderflow
+                    orderflow.GauntletFVG = gauntletFVG;
+                    
+                    // Add to our collection of Gauntlets if not already present
+                    if (!_gauntlets.Any(g => g.Index == gauntletFVG.Index && 
+                                        g.Direction == gauntletFVG.Direction))
+                    {
+                        _gauntlets.Add(gauntletFVG);
+                    }
+                    
+                    // Draw it if visualization is enabled
+                    if (_showGauntlet)
+                    {
+                        DrawGauntlet(gauntletFVG);
+                    }
+                    
+                    // Exit early - we found our Gauntlet
+                    return;
+                }
+            }
+            
+            // If we couldn't find a matching FVG from the detector, 
+            // try to detect an FVG pattern directly
+            gauntletFVG = DetectFVGPatternInOrderflow(orderflow, sweepingCandleIndex);
+            
+            if (gauntletFVG != null)
+            {
+                // Mark as Gauntlet
+                gauntletFVG.IsGauntlet = true;
+                
+                // Associate with orderflow
+                orderflow.GauntletFVG = gauntletFVG;
+                
+                // Add to Gauntlets collection
+                _gauntlets.Add(gauntletFVG);
+                
+                // Draw if visualization is enabled
+                if (_showGauntlet)
+                {
+                    DrawGauntlet(gauntletFVG);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Finds the last (most recent) FVG contained within an orderflow's boundaries
+        /// </summary>
+        private Level FindLastFVGInOrderflow(Level orderflow, List<Level> allFvgs)
+        {
+            // Define the price and time boundaries of the orderflow
+            double lowPrice = orderflow.Low;
+            double highPrice = orderflow.High;
+            DateTime earliestTime = orderflow.Direction == Direction.Up ? 
+                                   orderflow.LowTime : orderflow.HighTime;
+            DateTime latestTime = orderflow.Direction == Direction.Up ? 
+                                 orderflow.HighTime : orderflow.LowTime;
+            
+            // Filter FVGs that have the same direction as the orderflow and are contained within its boundaries
+            var matchingFvgs = allFvgs
+                .Where(fvg => 
+                    // Same direction
+                    fvg.Direction == orderflow.Direction &&
+                    // Within price boundaries (at least partially)
+                    !(fvg.High < lowPrice || fvg.Low > highPrice) &&
+                    // Within time boundaries
+                    fvg.MidTime >= earliestTime && fvg.MidTime <= latestTime)
+                // Sort by index (descending) to get the most recent first
+                .OrderByDescending(fvg => fvg.Index)
+                .ToList();
+            
+            // Return the most recent FVG if any were found
+            return matchingFvgs.FirstOrDefault();
+        }
+        
+        /// <summary>
+        /// Detects an FVG pattern directly from the price action within the orderflow boundaries
+        /// </summary>
+        private Level DetectFVGPatternInOrderflow(Level orderflow, int sweepingCandleIndex)
+        {
+            // Define the index range within the orderflow
+            int startIndex = Math.Min(orderflow.IndexLow, orderflow.IndexHigh);
+            int endIndex = Math.Max(orderflow.IndexLow, orderflow.IndexHigh);
+            
+            // Check if the sweeping candle is within the orderflow
+            if (sweepingCandleIndex < startIndex || sweepingCandleIndex > endIndex)
+                return null;
+            
+            // Try to detect an FVG with the sweeping candle as either the second or third candle
+            
+            // Case 1: Sweeping candle as the third candle
+            if (sweepingCandleIndex >= startIndex + 2 && sweepingCandleIndex <= endIndex)
+            {
+                // Get the three consecutive bars
+                var bar1 = Bars[sweepingCandleIndex - 2]; // First candle
+                var bar2 = Bars[sweepingCandleIndex - 1]; // Middle candle
+                var bar3 = Bars[sweepingCandleIndex];     // Sweeping candle (third candle)
+                
+                // Check for valid FVG pattern
+                if (orderflow.Direction == Direction.Up && bar1.High < bar3.Low)
+                {
+                    // Bullish FVG
+                    return new Level(
+                        LevelType.FairValueGap,
+                        bar1.High,
+                        bar3.Low,
+                        bar1.OpenTime,
+                        bar3.OpenTime,
+                        bar2.OpenTime,
+                        Direction.Up,
+                        sweepingCandleIndex - 2,
+                        sweepingCandleIndex,
+                        sweepingCandleIndex - 2,
+                        sweepingCandleIndex - 1,
+                        Zone.Premium
+                    );
+                }
+                else if (orderflow.Direction == Direction.Down && bar1.Low > bar3.High)
+                {
+                    // Bearish FVG
+                    return new Level(
+                        LevelType.FairValueGap,
+                        bar3.High,
+                        bar1.Low,
+                        bar3.OpenTime,
+                        bar1.OpenTime,
+                        bar2.OpenTime,
+                        Direction.Down,
+                        sweepingCandleIndex - 2,
+                        sweepingCandleIndex - 2,
+                        sweepingCandleIndex,
+                        sweepingCandleIndex - 1,
+                        Zone.Discount
+                    );
+                }
+            }
+            
+            // Case 2: Sweeping candle as the second candle
+            if (sweepingCandleIndex >= startIndex + 1 && sweepingCandleIndex < endIndex)
+            {
+                // Get the three consecutive bars
+                var bar1 = Bars[sweepingCandleIndex - 1]; // First candle
+                var bar2 = Bars[sweepingCandleIndex];     // Sweeping candle (second candle)
+                var bar3 = Bars[sweepingCandleIndex + 1]; // Third candle
+                
+                // Check for valid FVG pattern
+                if (orderflow.Direction == Direction.Up && bar1.High < bar3.Low)
+                {
+                    // Bullish FVG
+                    return new Level(
+                        LevelType.FairValueGap,
+                        bar1.High,
+                        bar3.Low,
+                        bar1.OpenTime,
+                        bar3.OpenTime,
+                        bar2.OpenTime,
+                        Direction.Up,
+                        sweepingCandleIndex - 1,
+                        sweepingCandleIndex + 1,
+                        sweepingCandleIndex - 1,
+                        sweepingCandleIndex,
+                        Zone.Premium
+                    );
+                }
+                else if (orderflow.Direction == Direction.Down && bar1.Low > bar3.High)
+                {
+                    // Bearish FVG
+                    return new Level(
+                        LevelType.FairValueGap,
+                        bar3.High,
+                        bar1.Low,
+                        bar3.OpenTime,
+                        bar1.OpenTime,
+                        bar2.OpenTime,
+                        Direction.Down,
+                        sweepingCandleIndex - 1,
+                        sweepingCandleIndex - 1,
+                        sweepingCandleIndex + 1,
+                        sweepingCandleIndex,
+                        Zone.Discount
+                    );
+                }
+            }
+            
+            return null;
+        }
+        
+        /// <summary>
+        /// Finds the most relevant FVG where the sweeping candle is either the second or third candle,
+        /// prioritizing the third candle of the FVG pattern
+        /// </summary>
+        private Level FindGauntletFVG(Level orderflow, int sweepingCandleIndex, List<Level> allFvgs)
+        {
+            // First, try to find FVGs where the sweeping candle is the third candle (most significant)
+            Level thirdCandleMatch = null;
+            Level secondCandleMatch = null;
+            
+            // Sort FVGs by Index (descending) to get the most recent ones first
+            var sortedFvgs = allFvgs
+                .Where(fvg => fvg.Direction == orderflow.Direction)
+                .OrderByDescending(fvg => fvg.Index)
+                .ToList();
+            
+            foreach (var fvg in sortedFvgs)
+            {
+                if (orderflow.Direction == Direction.Up)
+                {
+                    // For bullish FVGs, the third candle is IndexHigh (the candle that creates the gap)
+                    if (sweepingCandleIndex == fvg.IndexHigh)
+                    {
+                        thirdCandleMatch = fvg;
+                        break; // Found the most relevant FVG, stop searching
+                    }
+                    // Store second candle match as fallback
+                    else if (sweepingCandleIndex == fvg.IndexMid && secondCandleMatch == null)
+                    {
+                        secondCandleMatch = fvg;
+                        // Don't break, keep looking for third candle matches
+                    }
+                }
+                else // Direction.Down
+                {
+                    // For bearish FVGs, the third candle is IndexLow (the candle that creates the gap)
+                    if (sweepingCandleIndex == fvg.IndexLow)
+                    {
+                        thirdCandleMatch = fvg;
+                        break; // Found the most relevant FVG, stop searching
+                    }
+                    // Store second candle match as fallback
+                    else if (sweepingCandleIndex == fvg.IndexMid && secondCandleMatch == null)
+                    {
+                        secondCandleMatch = fvg;
+                        // Don't break, keep looking for third candle matches
+                    }
+                }
+            }
+            
+            // Return the third candle match if found, otherwise return the second candle match
+            return thirdCandleMatch ?? secondCandleMatch;
+        }
+        
+        /// <summary>
+        /// Detects an FVG pattern directly from the price action if not found in the FVG detector,
+        /// prioritizing patterns where the sweeping candle is the third candle
+        /// </summary>
+        private Level DetectFVGPattern(Level orderflow, int sweepingCandleIndex)
+        {
+            // First, try to detect an FVG with the sweeping candle as the third candle (most significant)
+            Level thirdCandlePattern = DetectThirdCandleFVGPattern(orderflow, sweepingCandleIndex);
+            if (thirdCandlePattern != null)
+                return thirdCandlePattern;
+                
+            // If not found, fall back to detecting an FVG with the sweeping candle as the second candle
+            return DetectSecondCandleFVGPattern(orderflow, sweepingCandleIndex);
+        }
+        
+        /// <summary>
+        /// Detects an FVG pattern where the sweeping candle is the third candle
+        /// </summary>
+        private Level DetectThirdCandleFVGPattern(Level orderflow, int sweepingCandleIndex)
+        {
+            // We need at least 3 candles to detect an FVG
+            if (sweepingCandleIndex < 2)
+                return null;
+                
+            // Get the three consecutive bars with sweeping candle as the third
+            var bar1 = Bars[sweepingCandleIndex - 2]; // First candle
+            var bar2 = Bars[sweepingCandleIndex - 1]; // Middle candle
+            var bar3 = Bars[sweepingCandleIndex];     // Sweeping candle (Third candle)
+            
+            // Check for bullish FVG pattern (bar1's high is lower than bar3's low)
+            if (bar1.High < bar3.Low && orderflow.Direction == Direction.Up)
+            {
+                // Create a bullish FVG level
+                return new Level(
+                    LevelType.FairValueGap,
+                    bar1.High,
+                    bar3.Low,
+                    bar1.OpenTime,
+                    bar3.OpenTime,
+                    bar2.OpenTime,
+                    Direction.Up,
+                    sweepingCandleIndex - 2,  // Index is first candle
+                    sweepingCandleIndex,      // IndexHigh is third candle (sweeping candle)
+                    sweepingCandleIndex - 2,  // IndexLow is first candle
+                    sweepingCandleIndex - 1,  // IndexMid is second candle
+                    Zone.Premium
+                );
+            }
+            // Check for bearish FVG pattern (bar1's low is higher than bar3's high)
+            else if (bar1.Low > bar3.High && orderflow.Direction == Direction.Down)
+            {
+                // Create a bearish FVG level
+                return new Level(
+                    LevelType.FairValueGap,
+                    bar3.High,
+                    bar1.Low,
+                    bar3.OpenTime,
+                    bar1.OpenTime,
+                    bar2.OpenTime,
+                    Direction.Down,
+                    sweepingCandleIndex - 2,  // Index is first candle
+                    sweepingCandleIndex - 2,  // IndexHigh is first candle
+                    sweepingCandleIndex,      // IndexLow is third candle (sweeping candle)
+                    sweepingCandleIndex - 1,  // IndexMid is second candle
+                    Zone.Discount
+                );
+            }
+            
+            return null;
+        }
+        
+        /// <summary>
+        /// Detects an FVG pattern where the sweeping candle is the second candle
+        /// </summary>
+        private Level DetectSecondCandleFVGPattern(Level orderflow, int sweepingCandleIndex)
+        {
+            // We need to have available bars for all three candles
+            if (sweepingCandleIndex < 1 || sweepingCandleIndex + 1 >= Bars.Count)
+                return null;
+                
+            // Get the three consecutive bars with sweeping candle as the second
+            var bar1 = Bars[sweepingCandleIndex - 1]; // First candle
+            var bar2 = Bars[sweepingCandleIndex];     // Sweeping candle (Second candle)
+            var bar3 = Bars[sweepingCandleIndex + 1]; // Third candle
+            
+            // Check for bullish FVG pattern (bar1's high is lower than bar3's low)
+            if (bar1.High < bar3.Low && orderflow.Direction == Direction.Up)
+            {
+                // Create a bullish FVG level
+                return new Level(
+                    LevelType.FairValueGap,
+                    bar1.High,
+                    bar3.Low,
+                    bar1.OpenTime,
+                    bar3.OpenTime,
+                    bar2.OpenTime,
+                    Direction.Up,
+                    sweepingCandleIndex - 1,  // Index is first candle
+                    sweepingCandleIndex + 1,  // IndexHigh is third candle
+                    sweepingCandleIndex - 1,  // IndexLow is first candle
+                    sweepingCandleIndex,      // IndexMid is second candle (sweeping candle)
+                    Zone.Premium
+                );
+            }
+            // Check for bearish FVG pattern (bar1's low is higher than bar3's high)
+            else if (bar1.Low > bar3.High && orderflow.Direction == Direction.Down)
+            {
+                // Create a bearish FVG level
+                return new Level(
+                    LevelType.FairValueGap,
+                    bar3.High,
+                    bar1.Low,
+                    bar3.OpenTime,
+                    bar1.OpenTime,
+                    bar2.OpenTime,
+                    Direction.Down,
+                    sweepingCandleIndex - 1,  // Index is first candle
+                    sweepingCandleIndex - 1,  // IndexHigh is first candle
+                    sweepingCandleIndex + 1,  // IndexLow is third candle
+                    sweepingCandleIndex,      // IndexMid is second candle (sweeping candle)
+                    Zone.Discount
+                );
+            }
+            
+            return null;
         }
 
         /// <summary>
@@ -536,6 +1011,27 @@ namespace Zuva.Services
             // Draw rectangle with the appropriate color based on direction
             _chart.DrawOrderFlowRectangle(level, id);
         }
+        
+        /// <summary>
+        /// Draws a Gauntlet on the chart using the order block drawing method
+        /// </summary>
+        private void DrawGauntlet(Level gauntlet)
+        {
+            if (_chart == null)
+                return;
+                
+            // Create a unique ID for this Gauntlet
+            string id = $"gauntlet-{gauntlet.Direction}-{gauntlet.Index}-{gauntlet.IndexHigh}-{gauntlet.IndexLow}";
+            
+            // Use the existing DrawRectangle method from ChartExtensions
+            // but with higher opacity to distinguish from other elements
+            _chart.DrawRectangle(
+                gauntlet,
+                id,
+                true,  // Draw midpoint
+                25     // Higher opacity for Gauntlets
+            );
+        }
 
         /// <summary>
         /// Gets all order flow levels
@@ -587,6 +1083,22 @@ namespace Zuva.Services
         public List<Level> GetLiquiditySweepLevels()
         {
             return _pdArrays.Where(l => l.SweptSwingPoint != null).ToList();
+        }
+        
+        /// <summary>
+        /// Gets all Gauntlets
+        /// </summary>
+        public List<Level> GetGauntlets()
+        {
+            return _gauntlets;
+        }
+        
+        /// <summary>
+        /// Gets all Gauntlets that match the given direction
+        /// </summary>
+        public List<Level> GetGauntlets(Direction direction)
+        {
+            return _gauntlets.Where(g => g.Direction == direction).ToList();
         }
 
         /// <summary>
