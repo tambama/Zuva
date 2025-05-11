@@ -217,7 +217,14 @@ namespace Zuva
                                     _marketStructureAnalyzer.ProcessSwingPoint(swingPoint);
                                 }
                             }
-
+                            
+                            // Check if the swing point is in a FVG or Order Block
+                            if (_fvgDetector != null)
+                            {
+                                swingPoint.IsInFVG = _fvgDetector.IsInFVG(swingPoint.Price, swingPoint.Time);
+                                swingPoint.IsInOrderBlock = _fvgDetector.IsInOrderBlock(swingPoint.Price, swingPoint.Time);
+                            }
+                            
                             // Process for PD Array analysis
                             if (_pdArrayAnalyzer != null)
                             {
@@ -234,13 +241,6 @@ namespace Zuva
                                     // Process the new swing point for PD Array analysis
                                     _pdArrayAnalyzer.ProcessSwingPoint(swingPoint);
                                 }
-                            }
-                            
-                            // Check if the swing point is in a FVG or Order Block
-                            if (_fvgDetector != null)
-                            {
-                                swingPoint.IsInFVG = _fvgDetector.IsInFVG(swingPoint.Price, swingPoint.Time);
-                                swingPoint.IsInOrderBlock = _fvgDetector.IsInOrderBlock(swingPoint.Price, swingPoint.Time);
                             }
                         }
                     }
