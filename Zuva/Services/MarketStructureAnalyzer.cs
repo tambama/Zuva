@@ -282,7 +282,6 @@ namespace Zuva.Services
                     var point = _swingPoints.FirstOrDefault(s => s.Index == _highBOS.Index);
                     if (point != null)
                     {
-                        point.Swept = true;
                         point.SwingType = SwingType.HH;
 
                         // Mark in indicator series
@@ -374,8 +373,6 @@ namespace Zuva.Services
                     var point = _swingPoints.FirstOrDefault(s => s.Index == _highCHOCH.Index);
                     if (point != null)
                     {
-                        point.Swept = true;
-
                         // Draw a straight trendline from the CHOCH point to the confirming candle
                         if (_showChoch)
                         {
@@ -523,7 +520,6 @@ namespace Zuva.Services
                     var point = _swingPoints.FirstOrDefault(s => s.Index == _lowBOS.Index);
                     if (point != null)
                     {
-                        point.Swept = true;
                         point.SwingType = SwingType.LL;
 
                         // Mark in indicator series
@@ -615,8 +611,6 @@ namespace Zuva.Services
                     var point = _swingPoints.FirstOrDefault(s => s.Index == _lowCHOCH.Index);
                     if (point != null)
                     {
-                        point.Swept = true;
-
                         // Draw a straight trendline from the CHOCH point to the confirming candle
                         if (_showChoch)
                         {
