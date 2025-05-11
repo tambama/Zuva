@@ -1,9 +1,6 @@
 using cAlgo.API;
 using Mwenje.Extensions;
 using Zuva.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace Zuva.Services
 {
@@ -83,32 +80,42 @@ namespace Zuva.Services
                 }
                 
                 // Check for bullish order block
-                if (_showOrderBlock && currentIndex >= 3)
+                if (_showOrderBlock && currentIndex >= 3 && _swingPointDetector != null)
                 {
-                    var previousBar = bars[currentIndex - 3]; // The bar before bar1
+                    // First, check if candle1 is a swing point (specifically a swing low)
+                    // We're looking for an opposing swing point in the direction of the recent swing
+                    var bar1SwingPoint = _swingPointDetector.GetSwingPointAtIndex(currentIndex - 2);
                     
-                    // Bullish Order Block: If candle1 swept the low of the previous candle and closed above
-                    if (bar1.Low <= previousBar.Low && bar1.Close > previousBar.Low)
+                    // We need bar1 to be a swing low for a bullish order block
+                    if (bar1SwingPoint != null && bar1SwingPoint.Direction == Direction.Down)
                     {
-                        CreateBullishOrderBlock(bars, bar1, currentIndex - 2);
-                    }
-                    
-                    // Check against swing points if we have access to them
-                    if (_swingPointDetector != null)
-                    {
-                        var swingLows = _swingPointDetector.GetSwingLows();
-                        
-                        // Check if bar1 swept any swing low and closed above it
-                        foreach (var swingLow in swingLows)
+                        // Get the most recent swing point before this one
+                        var previousSwingPoints = _swingPointDetector.GetAllSwingPoints()
+                            .Where(sp => sp.Index < currentIndex - 2)
+                            .OrderByDescending(sp => sp.Index)
+                            .ToList();
+                            
+                        // Find the most recent swing high (for confirming directional alignment)
+                        var lastSwingHigh = previousSwingPoints
+                            .FirstOrDefault(sp => sp.Direction == Direction.Up);
+                            
+                        // Check if we've swept a previous swing low
+                        bool sweptPreviousLow = false;
+                        var previousSwingLow = previousSwingPoints
+                            .FirstOrDefault(sp => sp.Direction == Direction.Down);
+                            
+                        if (previousSwingLow != null)
                         {
-                            // Only consider swing lows that occurred before our bar1
-                            if (swingLow.Index < currentIndex - 2 && 
-                                bar1.Low <= swingLow.Price && 
-                                bar1.Close > swingLow.Price)
-                            {
-                                CreateBullishOrderBlock(bars, bar1, currentIndex - 2);
-                                break; // Only need to create one order block
-                            }
+                            sweptPreviousLow = bar1.Low <= previousSwingLow.Price && 
+                                              bar1.Close > previousSwingLow.Price;
+                        }
+                        
+                        // Verify that the candle meets our order block criteria:
+                        // 1. It's a swing low
+                        // 2. Either it swept a previous swing low OR it came after a swing high
+                        if (sweptPreviousLow || (lastSwingHigh != null && lastSwingHigh.Index < bar1SwingPoint.Index))
+                        {
+                            CreateBullishOrderBlock(bars, bar1, currentIndex - 2);
                         }
                     }
                 }
@@ -154,32 +161,42 @@ namespace Zuva.Services
                 }
                 
                 // Check for bearish order block
-                if (_showOrderBlock && currentIndex >= 3)
+                if (_showOrderBlock && currentIndex >= 3 && _swingPointDetector != null)
                 {
-                    var previousBar = bars[currentIndex - 3]; // The bar before bar1
+                    // First, check if candle1 is a swing point (specifically a swing high)
+                    // We're looking for an opposing swing point in the direction of the recent swing
+                    var bar1SwingPoint = _swingPointDetector.GetSwingPointAtIndex(currentIndex - 2);
                     
-                    // Bearish Order Block: If candle1 swept the high of the previous candle and closed below
-                    if (bar1.High >= previousBar.High && bar1.Close < previousBar.High)
+                    // We need bar1 to be a swing high for a bearish order block
+                    if (bar1SwingPoint != null && bar1SwingPoint.Direction == Direction.Up)
                     {
-                        CreateBearishOrderBlock(bars, bar1, currentIndex - 2);
-                    }
-                    
-                    // Check against swing points if we have access to them
-                    if (_swingPointDetector != null)
-                    {
-                        var swingHighs = _swingPointDetector.GetSwingHighs();
-                        
-                        // Check if bar1 swept any swing high and closed below it
-                        foreach (var swingHigh in swingHighs)
+                        // Get the most recent swing point before this one
+                        var previousSwingPoints = _swingPointDetector.GetAllSwingPoints()
+                            .Where(sp => sp.Index < currentIndex - 2)
+                            .OrderByDescending(sp => sp.Index)
+                            .ToList();
+                            
+                        // Find the most recent swing low (for confirming directional alignment)
+                        var lastSwingLow = previousSwingPoints
+                            .FirstOrDefault(sp => sp.Direction == Direction.Down);
+                            
+                        // Check if we've swept a previous swing high
+                        bool sweptPreviousHigh = false;
+                        var previousSwingHigh = previousSwingPoints
+                            .FirstOrDefault(sp => sp.Direction == Direction.Up);
+                            
+                        if (previousSwingHigh != null)
                         {
-                            // Only consider swing highs that occurred before our bar1
-                            if (swingHigh.Index < currentIndex - 2 && 
-                                bar1.High >= swingHigh.Price && 
-                                bar1.Close < swingHigh.Price)
-                            {
-                                CreateBearishOrderBlock(bars, bar1, currentIndex - 2);
-                                break; // Only need to create one order block
-                            }
+                            sweptPreviousHigh = bar1.High >= previousSwingHigh.Price && 
+                                               bar1.Close < previousSwingHigh.Price;
+                        }
+                        
+                        // Verify that the candle meets our order block criteria:
+                        // 1. It's a swing high
+                        // 2. Either it swept a previous swing high OR it came after a swing low
+                        if (sweptPreviousHigh || (lastSwingLow != null && lastSwingLow.Index < bar1SwingPoint.Index))
+                        {
+                            CreateBearishOrderBlock(bars, bar1, currentIndex - 2);
                         }
                     }
                 }
