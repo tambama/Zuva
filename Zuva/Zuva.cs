@@ -37,6 +37,8 @@ namespace Zuva
         
         [Parameter("Show Order Blocks", Group = "PD Arrays", DefaultValue = true)]
         public bool ShowOrderBlock { get; set; }
+        [Parameter("Show Liquidity Sweeps", Group = "Liquidity", DefaultValue = true)]
+        public bool ShowLiquiditySweep { get; set; }
 
         [Output("Swing High", Color = Colors.White, PlotType = PlotType.Points, Thickness = 1)]
         public IndicatorDataSeries SwingHighs { get; set; }
@@ -108,13 +110,14 @@ namespace Zuva
             // Initialize PD Array analyzer
             try
             {
-                _pdArrayAnalyzer = new PdArrayAnalyzer(Chart, ShowOrderFlow);
+                _pdArrayAnalyzer = new PdArrayAnalyzer(Chart, Bars, ShowOrderFlow, ShowLiquiditySweep);
             }
             catch (Exception ex)
             {
                 Print("Error initializing PD Array Analyzer: " + ex.Message);
                 // Disable to prevent further errors
                 ShowOrderFlow = false;
+                ShowLiquiditySweep = false;
             }
 
             // Initialize market structure analyzer if enabled
@@ -396,6 +399,38 @@ namespace Zuva
         public List<Level> GetBearishOrderBlocks()
         {
             return _fvgDetector?.GetBearishOrderBlocks() ?? new List<Level>();
+        }
+        
+        // Get orderflow levels that swept liquidity
+        public List<Level> GetLiquiditySweepLevels()
+        {
+            return _pdArrayAnalyzer?.GetLiquiditySweepLevels() ?? new List<Level>();
+        }
+
+        // Get all orderflow levels that swept multiple liquidity points
+        public List<Level> GetMultipleSweptLevels()
+        {
+            return _pdArrayAnalyzer?.GetPdArrays().Where(l => l.SweptSwingPoints?.Count > 1).ToList() ?? new List<Level>();
+        }
+
+        // Get all swing points that had their liquidity swept
+        public List<SwingPoint> GetSweptSwingPoints()
+        {
+            List<SwingPoint> sweptPoints = new List<SwingPoint>();
+    
+            var levels = _pdArrayAnalyzer?.GetPdArrays();
+            if (levels != null)
+            {
+                foreach (var level in levels)
+                {
+                    if (level.SweptSwingPoints != null)
+                    {
+                        sweptPoints.AddRange(level.SweptSwingPoints);
+                    }
+                }
+            }
+    
+            return sweptPoints;
         }
     }
 }

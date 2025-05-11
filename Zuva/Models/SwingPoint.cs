@@ -17,6 +17,9 @@ public class SwingPoint
     public Candle Bar { get; set; }
     public Direction CandleDirection { get; set; }
     public bool Swept { get; set; }
+    
+    // Added property to track which candle swept this swing point
+    public int IndexOfSweepingCandle { get; set; }
 
     // ICT Concepts
     public LiquidityType LiquidityType { get; set; }

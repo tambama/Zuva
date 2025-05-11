@@ -19,6 +19,7 @@ public class Level
         StretchTo = stretchTo;
         IsConfirmed = isConfirmed;
         Entry = entry;
+        SweptSwingPoints = new List<SwingPoint>();
     }
 
     public Zone Zone { get; set; }
@@ -40,4 +41,10 @@ public class Level
     public bool IsConfirmed { get; set; }
     public DateTime? StretchTo { get; set; }
     public double? Entry { get; set; }
+    
+    // Properties for liquidity sweep tracking
+    public SwingPoint SweptSwingPoint { get; set; } // The extreme swept swing point
+    public List<SwingPoint> SweptSwingPoints { get; set; } = new List<SwingPoint>(); // All swept swing points
+    public int IndexOfSweepingCandle { get; set; }
+    public int SweptCount => SweptSwingPoints?.Count ?? 0;
 }
