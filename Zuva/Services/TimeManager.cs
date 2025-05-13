@@ -15,8 +15,8 @@ namespace Zuva.Services
         private readonly List<TimeRange> _macros;
         private readonly bool _showMacros;
         
-        // Keep track of which days we've already drawn lines for to avoid duplication
-        private readonly HashSet<DateTime> _drawnDates = new HashSet<DateTime>();
+        // Keep track of which macro times we've already drawn lines for to avoid duplication
+        private readonly HashSet<string> _drawnMacroTimes = new HashSet<string>();
         
         /// <summary>
         /// Creates a new instance of the TimeManager
@@ -56,32 +56,40 @@ namespace Zuva.Services
         }
         
         /// <summary>
-        /// Process a bar to check for macro time periods and draw vertical lines if needed
+        /// Process a bar to check if it matches the start time of any macro
         /// </summary>
         public void ProcessBar(DateTime time)
         {
-            if (!_showMacros)
+            if (!_showMacros || _chart == null)
                 return;
-                
-            // Only process each date once
+            
             DateTime dateOnly = time.Date;
-            if (_drawnDates.Contains(dateOnly))
-                return;
-                
-            // Draw lines for each macro time for this date
+            TimeSpan timeOfDay = time.TimeOfDay;
+            
+            // Check if this bar's time matches any macro start time
             foreach (var macro in _macros)
             {
-                // Create DateTime for the start and end of the macro time on this date
+                // Create the full datetime for this macro's start time on the current date
                 DateTime macroStartTime = dateOnly.Add(macro.StartTime);
                 DateTime macroEndTime = dateOnly.Add(macro.EndTime);
                 
-                // Draw vertical lines at both the start and end of the macro time
-                DrawMacroLine(macroStartTime, "start");
-                DrawMacroLine(macroEndTime, "end");
+                // Create a unique identifier for this macro on this date
+                string macroKey = $"{dateOnly.ToString("yyyyMMdd")}-{macro.StartTime.Hours:D2}{macro.StartTime.Minutes:D2}";
+                
+                // See if this bar's time is close to a macro start time (within 1 minute)
+                bool closeToMacroStart = Math.Abs((timeOfDay - macro.StartTime).TotalMinutes) < 1;
+                
+                // If this is a macro start time and we haven't drawn it yet
+                if (closeToMacroStart && !_drawnMacroTimes.Contains(macroKey))
+                {
+                    // Draw both the start and end lines for this macro
+                    DrawMacroLine(macroStartTime, "start");
+                    DrawMacroLine(macroEndTime, "end");
+                    
+                    // Mark this macro as drawn
+                    _drawnMacroTimes.Add(macroKey);
+                }
             }
-            
-            // Mark this date as processed
-            _drawnDates.Add(dateOnly);
         }
         
         /// <summary>
@@ -133,31 +141,43 @@ namespace Zuva.Services
                 
             if (!showMacros)
             {
-                // Remove all macro lines
-                foreach (var date in _drawnDates)
+                // Remove all macro lines that we've drawn
+                foreach (var macroKey in _drawnMacroTimes)
                 {
-                    foreach (var macro in _macros)
+                    // Parse the date and time from the key
+                    string dateStr = macroKey.Substring(0, 8);
+                    string timeStr = macroKey.Substring(9, 4);
+                    
+                    if (DateTime.TryParseExact(dateStr, "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out DateTime date)
+                        && int.TryParse(timeStr.Substring(0, 2), out int hours)
+                        && int.TryParse(timeStr.Substring(2, 2), out int minutes))
                     {
-                        // Remove both start and end lines
-                        DateTime macroStartTime = date.Add(macro.StartTime);
-                        DateTime macroEndTime = date.Add(macro.EndTime);
+                        // Recreate the start and end times
+                        DateTime startTime = date.AddHours(hours).AddMinutes(minutes);
                         
-                        string startId = $"macro-start-{macroStartTime.Ticks}";
-                        string endId = $"macro-end-{macroEndTime.Ticks}";
+                        // Find the matching macro
+                        var matchingMacro = _macros.Find(m => 
+                            m.StartTime.Hours == hours && 
+                            m.StartTime.Minutes == minutes);
                         
-                        _chart.RemoveObject(startId);
-                        _chart.RemoveObject(endId);
+                        if (matchingMacro != null)
+                        {
+                            DateTime endTime = date.Add(matchingMacro.EndTime);
+                            
+                            // Remove the lines
+                            string startId = $"macro-start-{startTime.Ticks}";
+                            string endId = $"macro-end-{endTime.Ticks}";
+                            
+                            _chart.RemoveObject(startId);
+                            _chart.RemoveObject(endId);
+                        }
                     }
                 }
                 
-                // Clear the tracked dates
-                _drawnDates.Clear();
+                // Clear the tracking collection
+                _drawnMacroTimes.Clear();
             }
-            else
-            {
-                // Redraw all lines (will be handled in the next ProcessBar calls)
-                _drawnDates.Clear();
-            }
+            // If turning visibility on, we'll draw the lines as bars are processed
         }
     }
 }
