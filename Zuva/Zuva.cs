@@ -56,6 +56,8 @@ namespace Zuva
         
         [Parameter("Show Liquidity Sweeps", Group = "Liquidity", DefaultValue = true)]
         public bool ShowLiquiditySweep { get; set; }
+        [Parameter("Show STDv", Group = "Liquidity", DefaultValue = true)]
+        public bool ShowStdv { get; set; }
 
         [Output("Swing High", Color = Colors.White, PlotType = PlotType.Points, Thickness = 1)]
         public IndicatorDataSeries SwingHighs { get; set; }
@@ -86,6 +88,7 @@ namespace Zuva
         private List<SwingPoint> _swingPoints;
         private SwingPointDetector _htfSwingDetector;
         private List<SwingPoint> _htfSwingPoints;
+        private readonly List<StandardDeviation> _standardDeviations = new List<StandardDeviation>();
 
         private TimeFrame _highTimeFrame;
 
@@ -184,6 +187,8 @@ namespace Zuva
                     HigherLows,
                     ShowStructure,
                     ShowChoch,
+                    ShowStdv,
+                    _standardDeviations,
                     message => Print(message) // Pass Print method as logger
                 );
             }

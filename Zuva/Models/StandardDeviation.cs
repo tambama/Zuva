@@ -10,10 +10,13 @@ namespace Zuva.Models;
         /// <summary>
         /// Creates a new StandardDeviation instance using two price points
         /// </summary>
+        /// <param name="index">Index if the swing point zero</param>
         /// <param name="zero">The first price point (usually high)</param>
         /// <param name="one">The second price point (usually low)</param>
-        public StandardDeviation(double zero, double one, DateTime date)
+        /// <param name="date">The time of swing point zero</param>
+        public StandardDeviation(int index, double zero, double one, DateTime date)
         {
+            Index = index;
             Zero = zero;
             One = one;
             OneTime = date;
@@ -44,6 +47,8 @@ namespace Zuva.Models;
         public double MinusFour { get; set; }
 
         public DateTime OneTime { get; set; }
+        
+        public int Index { get; set; }
 
         /// <summary>
         /// Calculates the deviation levels based on the range

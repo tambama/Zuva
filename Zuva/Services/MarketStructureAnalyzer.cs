@@ -53,6 +53,10 @@ namespace Zuva.Services
 
         // Reference to all swing points
         private List<SwingPoint> _swingPoints = new List<SwingPoint>();
+        
+        // Collection for Standard Deviations
+        private bool _showStdv = false;
+        private readonly List<StandardDeviation> _standardDeviations = new List<StandardDeviation>();
 
         // Flag to track if we're properly initialized
         private bool _isInitialized = false;
@@ -67,6 +71,8 @@ namespace Zuva.Services
             IndicatorDataSeries hls,
             bool showStructure,
             bool showChoch,
+            bool showStdv,
+            List<StandardDeviation> standardDeviations,
             Action<string> logger = null)
         {
             _chart = chart;
@@ -78,6 +84,8 @@ namespace Zuva.Services
             _hls = hls;
             _showStructure = showStructure;
             _showChoch = showChoch;
+            _showStdv = showStdv;
+            _standardDeviations = standardDeviations;
             _logger = logger ?? (_ => { });
         }
 
@@ -226,6 +234,7 @@ namespace Zuva.Services
                 // Compare with _highBOS only if it exists
                 if (_highBOS != null && swingPoint.Price > _highBOS.Price)
                 {
+                    var to = _highBOS;
                     _highBOS = swingPoint;
 
                     // Only set _lowCHOCH if _lowBOS exists
@@ -259,6 +268,9 @@ namespace Zuva.Services
                                 // Mark in indicator series
                                 if (low.Index >= 0 && low.Index < _lls.Count)
                                     _lls[low.Index] = low.Price;
+                                
+                                
+                                CreateStandardDeviation(low, to, low.Time);
                             }
                         }
                     }
@@ -293,6 +305,7 @@ namespace Zuva.Services
                 // Mark Low point after taking out inducement in a downtrend
                 if (_bias == Direction.Down && _lowIND != null && swingPoint.Bar.High > _lowIND.Price)
                 {
+                    var to = _lowIND;
                     // Draw a line for swept inducement
                     if (_showChoch)
                     {
@@ -357,6 +370,8 @@ namespace Zuva.Services
                             // Mark in indicator series
                             if (point.Index >= 0 && point.Index < _lls.Count)
                                 _lls[point.Index] = point.Price;
+                            
+                            CreateStandardDeviation(point, to, to.Time);
                         }
                     }
 
@@ -370,6 +385,7 @@ namespace Zuva.Services
                 // Change of Character
                 if (_highCHOCH != null && swingPoint.Price > _highCHOCH.Price)
                 {
+                    var to = _highCHOCH;
                     var point = _swingPoints.FirstOrDefault(s => s.Index == _highCHOCH.Index);
                     if (point != null)
                     {
@@ -454,6 +470,8 @@ namespace Zuva.Services
                             // Mark in indicator series
                             if (low.Index >= 0 && low.Index < _lls.Count)
                                 _lls[low.Index] = low.Price;
+                            
+                            CreateStandardDeviation(low, to, to.Time);
                         }
                     }
                 }
@@ -468,6 +486,7 @@ namespace Zuva.Services
                     // Only set _highCHOCH if _highBOS exists
                     if (_highBOS != null)
                     {
+                        var to = _highBOS;
                         _highCHOCH = _highBOS;
 
                         // Only try to mark the high in the series if we have a valid index
@@ -497,6 +516,8 @@ namespace Zuva.Services
                                 // Mark in indicator series
                                 if (high.Index >= 0 && high.Index < _hhs.Count)
                                     _hhs[high.Index] = high.Price;
+                                
+                                CreateStandardDeviation(high, to, to.Time);
                             }
                         }
                     }
@@ -531,6 +552,7 @@ namespace Zuva.Services
                 // Mark High point after taking out inducement in an uptrend
                 if (_bias == Direction.Up && _highIND != null && swingPoint.Bar.Low < _highIND.Price)
                 {
+                    var to = _highIND;
                     // Draw a line for swept inducement
                     if (_showChoch)
                     {
@@ -595,6 +617,8 @@ namespace Zuva.Services
                             // Mark in indicator series
                             if (point.Index >= 0 && point.Index < _hhs.Count)
                                 _hhs[point.Index] = point.Price;
+                            
+                            CreateStandardDeviation(point, to, to.Time);
                         }
                     }
 
@@ -608,6 +632,7 @@ namespace Zuva.Services
                 // Change of Character
                 if (_lowCHOCH != null && swingPoint.Price < _lowCHOCH.Price)
                 {
+                    var to = _lowCHOCH;
                     var point = _swingPoints.FirstOrDefault(s => s.Index == _lowCHOCH.Index);
                     if (point != null)
                     {
@@ -693,6 +718,8 @@ namespace Zuva.Services
                             // Mark in indicator series
                             if (high.Index >= 0 && high.Index < _hhs.Count)
                                 _hhs[high.Index] = high.Price;
+                            
+                            CreateStandardDeviation(high, to, to.Time);
                         }
                     }
                 }
@@ -716,6 +743,24 @@ namespace Zuva.Services
             catch (Exception ex)
             {
                 // Cannot use Print - must be handled externally
+            }
+        }
+        
+        /// <summary>
+        /// Creates a standard deviation calculation after a market structure change
+        /// </summary>
+        private void CreateStandardDeviation(SwingPoint from, SwingPoint to, DateTime time)
+        {
+            if (from == null || to == null)
+                return;
+        
+            var stdDev = new StandardDeviation(from.Index, from.Price, to.Price, time);
+            _standardDeviations.Add(stdDev);
+    
+            // Draw the standard deviation levels
+            if (_chart != null)
+            {
+                _chart.DrawStandardDeviation(stdDev);
             }
         }
 
