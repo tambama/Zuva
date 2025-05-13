@@ -1032,7 +1032,7 @@ namespace Zuva.Services
             var pendingCisdLevels = _cisdLevels
                 .Where(cisd => !cisd.IsConfirmed)
                 .ToList();
-
+            
             // Check for CISD confirmation
             foreach (var cisd in pendingCisdLevels)
             {
@@ -1211,14 +1211,15 @@ namespace Zuva.Services
         // Manage max CISD count
         private void ManageMaxCisdCount(Direction direction)
         {
+            return;
             // Get unconfirmed CISDs of the specified direction
             var unconfirmedCisds = _cisdLevels
-                .Where(cisd => cisd.Direction == direction && !cisd.Activated)
+                .Where(cisd => cisd.Direction == direction && !cisd.IsConfirmed)
                 .OrderBy(cisd => cisd.Index) // Order by index to get the oldest first
                 .ToList();
 
             // If we already have the maximum number, remove the oldest ones
-            while (unconfirmedCisds.Count > _maxCisdsPerDirection && unconfirmedCisds.Count > 0)
+            while (unconfirmedCisds.Count >= _maxCisdsPerDirection && unconfirmedCisds.Count > 0)
             {
                 var oldestCisd = unconfirmedCisds.First();
 
@@ -1230,6 +1231,7 @@ namespace Zuva.Services
 
         private Level FindBreakerBlockForCisd(Level cisd)
         {
+            _logger($"Looking for Breaker");
             if (cisd.Direction == Direction.Up) // Bullish CISD
             {
                 // Find the previous bullish orderflow
@@ -1314,6 +1316,7 @@ namespace Zuva.Services
 
         private List<int> FindLastConsecutiveCandlesInOrderflow(Level orderflow, Direction direction)
         {
+            _logger($"{orderflow == null}");
             // Define search range based on direction of the orderflow
             int startIndex = Math.Min(orderflow.IndexLow, orderflow.IndexHigh);
             int endIndex = Math.Max(orderflow.IndexLow, orderflow.IndexHigh);
@@ -1472,6 +1475,7 @@ namespace Zuva.Services
         /// </summary>
         public void Initialize(List<SwingPoint> swingPoints)
         {
+            _logger($"Initializing {swingPoints.Count} SwingPoints");
             if (swingPoints == null || swingPoints.Count < 3) // Need at least 3 points to form an orderflow
                 return;
 
