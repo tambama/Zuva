@@ -37,6 +37,7 @@ namespace Zuva.Services
 
         // Flag to control CISD visualization
         private readonly bool _showCISD;
+        private readonly int _maxCisdsPerDirection;
         private readonly List<Level> _cisdLevels = new List<Level>();
 
         // Collection to store all gauntlet levels
@@ -59,6 +60,7 @@ namespace Zuva.Services
             bool showGauntlet = false,
             FvgDetector fvgDetector = null,
             bool showCISD = false,
+            int maxCisdsPerDirection = 2,
             Action<string> logger = null)
         {
             _chart = chart;
@@ -68,6 +70,7 @@ namespace Zuva.Services
             _showGauntlet = showGauntlet;
             _fvgDetector = fvgDetector;
             _showCISD = showCISD;
+            _maxCisdsPerDirection = maxCisdsPerDirection;
             _logger = logger ?? (_ => { });
         }
 
@@ -942,6 +945,9 @@ namespace Zuva.Services
 
                 // Add to CISD collection
                 _cisdLevels.Add(cisdLevel);
+                
+                // Manage max CISDs before adding the new one
+                ManageMaxCisdCount(Direction.Down);
             }
             else // Direction.Down (bearish orderflow creates bullish CISD)
             {
@@ -1007,6 +1013,9 @@ namespace Zuva.Services
 
                 // Add to CISD collection
                 _cisdLevels.Add(cisdLevel);
+                
+                // Manage max CISDs before adding the new one
+                ManageMaxCisdCount(Direction.Up);
             }
         }
 
@@ -1161,36 +1170,23 @@ namespace Zuva.Services
             }
         }
 
-        // Replace the incorrect DrawCISDLine method with this corrected version
-        private void DrawCISDLine(Level cisdLevel, SwingPoint activatingPoint)
+        // Manage max CISD count
+        private void ManageMaxCisdCount(Direction direction)
         {
-            if (_chart == null)
-                return;
+            // Get unconfirmed CISDs of the specified direction
+            var unconfirmedCisds = _cisdLevels
+                .Where(cisd => cisd.Direction == direction && !cisd.Activated)
+                .OrderBy(cisd => cisd.Index)  // Order by index to get the oldest first
+                .ToList();
 
-            // Create a unique ID for this CISD line
-            string id = $"cisd-{cisdLevel.Direction}-{cisdLevel.Index}-{activatingPoint.Index}";
-
-            double priceLevel = cisdLevel.Direction == Direction.Up ? cisdLevel.High : cisdLevel.Low;
-            DateTime startTime = cisdLevel.Direction == Direction.Up ? cisdLevel.HighTime : cisdLevel.LowTime;
-            Color cisdColor = cisdLevel.Direction == Direction.Up ? Color.Green : Color.Pink;
-
-            // Draw a horizontal line from CISD level to activating point
-            if (_chart != null && _showCISD)
+            // If we already have the maximum number, remove the oldest ones
+            while (unconfirmedCisds.Count > _maxCisdsPerDirection && unconfirmedCisds.Count > 0)
             {
-                _chart.DrawStraightLine(
-                    id,
-                    startTime,
-                    priceLevel,
-                    activatingPoint.Time,
-                    priceLevel,
-                    null, // No label
-                    LineStyle.Dots,
-                    cisdColor,
-                    false, // No label displayed
-                    true, // Remove existing
-                    false, // Not extended
-                    true
-                );
+                var oldestCisd = unconfirmedCisds.First();
+        
+                // Remove from collection
+                _cisdLevels.Remove(oldestCisd);
+                unconfirmedCisds.Remove(oldestCisd);
             }
         }
 

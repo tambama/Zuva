@@ -33,6 +33,8 @@ namespace Zuva
         public bool ShowChoch { get; set; }
         [Parameter("Show CISD", Group = "Market Structure", DefaultValue = false)]
         public bool ShowCISD { get; set; }
+        [Parameter("Max CISD", Group = "Market Structure", DefaultValue = 2)]
+        public int MaxCisdsPerDirection { get; set; }
 
         [Parameter("Show Order Flow", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowOrderFlow { get; set; }
@@ -160,7 +162,8 @@ namespace Zuva
                     ShowGauntlet,
                     _fvgDetector,
                     ShowCISD,
-                    message => Print(message));  // Pass the FVG detector reference
+                    MaxCisdsPerDirection,
+                    message => Print(message));
             }
             catch (Exception ex)
             {
