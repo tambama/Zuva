@@ -5,12 +5,12 @@ using cAlgo.API;
 using Mwenje.Extensions;
 using Zuva.Extensions;
 using Zuva.Models;
-using Zuva.Services;
 
 namespace Zuva.Services
 {
     /// <summary>
-    /// Analyzes price action to identify and track order flow between swing points
+    /// Analyzes price action to identify and track order flow between swing points,
+    /// and detects FVGs and Order Blocks
     /// </summary>
     public class PdArrayAnalyzer
     {
@@ -19,6 +19,10 @@ namespace Zuva.Services
 
         // Collection to store all order flow levels
         private readonly List<Level> _pdArrays = new List<Level>();
+
+        // Collections for FVGs and Order Blocks (moved from FvgDetector)
+        private readonly List<Level> _fvgs = new List<Level>();
+        private readonly List<Level> _orderBlocks = new List<Level>();
 
         // Store history of swing points to identify patterns
         private readonly List<SwingPoint> _swingPointHistory = new List<SwingPoint>();
@@ -34,6 +38,10 @@ namespace Zuva.Services
 
         // Flag to control gauntlet visualization
         private readonly bool _showGauntlet;
+
+        // FVG and Order Block visualization flags (moved from FvgDetector)
+        private readonly bool _showFVG;
+        private readonly bool _showOrderBlock;
 
         // Flag to control CISD visualization
         private readonly bool _showCISD;
@@ -51,14 +59,14 @@ namespace Zuva.Services
         // Collection to store all gauntlet levels
         private readonly List<Level> _gauntlets = new List<Level>();
 
-        // Reference to FVG detector for finding FVGs
-        private readonly FvgDetector _fvgDetector;
+        // Reference to swing point detector (moved from FvgDetector)
+        private readonly SwingPointDetector _swingPointDetector;
 
         // Reference to bars for finding specific candles
         private Bars Bars;
 
         /// <summary>
-        /// Creates a new instance of the PD Array Analyzer
+        /// Creates a new instance of the PD Array Analyzer with integrated FVG detection
         /// </summary>
         public PdArrayAnalyzer(
             Chart chart,
@@ -66,11 +74,13 @@ namespace Zuva.Services
             bool showOrderFlow = false,
             bool showLiquiditySweep = false,
             bool showGauntlet = false,
-            FvgDetector fvgDetector = null,
+            bool showFVG = false,
+            bool showOrderBlock = false,
             bool showCISD = false,
             bool showBreakerBlock = false,
             bool showUnicorn = false,
             int maxCisdsPerDirection = 2,
+            SwingPointDetector swingPointDetector = null,
             Action<string> logger = null)
         {
             _chart = chart;
@@ -78,13 +88,370 @@ namespace Zuva.Services
             _showOrderFlow = showOrderFlow;
             _showLiquiditySweep = showLiquiditySweep;
             _showGauntlet = showGauntlet;
-            _fvgDetector = fvgDetector;
+            _showFVG = showFVG;
+            _showOrderBlock = showOrderBlock;
             _showCISD = showCISD;
             _showBreakerBlock = showBreakerBlock;
             _showUnicorn = showUnicorn;
             _maxCisdsPerDirection = maxCisdsPerDirection;
+            _swingPointDetector = swingPointDetector;
             _logger = logger ?? (_ => { });
         }
+
+        #region FVG Detection (Moved from FvgDetector)
+
+        /// <summary>
+        /// Detects Fair Value Gaps (FVGs) and Order Blocks in a series of bars
+        /// </summary>
+        public void DetectFVG(Bars bars, int currentIndex)
+        {
+            // Need at least 3 bars to detect a FVG
+            if (currentIndex < 2)
+                return;
+                
+            // Get the three consecutive bars
+            var bar1 = bars[currentIndex - 2]; // First candle (order block candidate)
+            var bar2 = bars[currentIndex - 1]; // Middle candle
+            var bar3 = bars[currentIndex];     // Last candle
+            
+            // Check for bullish FVG (bar1's high is lower than bar3's low)
+            if (bar1.High < bar3.Low)
+            {
+                // Check for volume imbalance between candle1 and candle2
+                bool hasVolumeImbalance1 = bar1.Close < bar2.Open;
+                
+                // Determine low boundary based on volume imbalance
+                double low = hasVolumeImbalance1 ? bar1.Close : bar1.High;
+                
+                // Check for volume imbalance between candle2 and candle3
+                bool hasVolumeImbalance2 = bar2.Close < bar3.Open;
+                
+                // Determine high boundary based on volume imbalance
+                double high = hasVolumeImbalance2 ? bar3.Open : bar3.Low;
+                
+                // Create a bullish FVG level
+                var bullishFVG = new Level(
+                    LevelType.FairValueGap,
+                    low,
+                    high,
+                    bar1.OpenTime,
+                    bar3.OpenTime,
+                    bar2.OpenTime,
+                    Direction.Up,
+                    currentIndex - 2,
+                    currentIndex,
+                    currentIndex - 2,
+                    currentIndex - 1, // Store the middle candle index for Gauntlet detection
+                    Zone.Premium  // FVGs in an uptrend are typically in the Premium zone
+                );
+                
+                // Add to collection - always store FVGs regardless of visibility setting
+                _fvgs.Add(bullishFVG);
+                
+                // Draw the FVG if visualization is enabled
+                if (_showFVG)
+                {
+                    DrawFVG(bullishFVG);
+                }
+                
+                // Check for bullish order block
+                if (_showOrderBlock && currentIndex >= 3 && _swingPointDetector != null)
+                {
+                    // First, check if candle1 is a swing point (specifically a swing low)
+                    // We're looking for an opposing swing point in the direction of the recent swing
+                    var bar1SwingPoint = _swingPointDetector.GetSwingPointAtIndex(currentIndex - 2);
+                    
+                    // We need bar1 to be a swing low for a bullish order block
+                    if (bar1SwingPoint != null && bar1SwingPoint.Direction == Direction.Down)
+                    {
+                        // Get the most recent swing point before this one
+                        var previousSwingPoints = _swingPointDetector.GetAllSwingPoints()
+                            .Where(sp => sp.Index < currentIndex - 2)
+                            .OrderByDescending(sp => sp.Index)
+                            .ToList();
+                            
+                        // Find the most recent swing high (for confirming directional alignment)
+                        var lastSwingHigh = previousSwingPoints
+                            .FirstOrDefault(sp => sp.Direction == Direction.Up);
+                            
+                        // Check if we've swept a previous swing low
+                        bool sweptPreviousLow = false;
+                        var previousSwingLow = previousSwingPoints
+                            .FirstOrDefault(sp => sp.Direction == Direction.Down);
+                            
+                        if (previousSwingLow != null)
+                        {
+                            sweptPreviousLow = bar1.Low <= previousSwingLow.Price && 
+                                              bar1.Close > previousSwingLow.Price;
+                        }
+                        
+                        // Verify that the candle meets our order block criteria:
+                        // 1. It's a swing low
+                        // 2. Either it swept a previous swing low OR it came after a swing high
+                        if (sweptPreviousLow || (lastSwingHigh != null && lastSwingHigh.Index < bar1SwingPoint.Index))
+                        {
+                            CreateBullishOrderBlock(bars, bar1, currentIndex - 2);
+                        }
+                    }
+                }
+            }
+            
+            // Check for bearish FVG (bar1's low is higher than bar3's high)
+            else if (bar1.Low > bar3.High)
+            {
+                // Check for volume imbalance between candle1 and candle2
+                bool hasVolumeImbalance1 = bar1.Close > bar2.Open;
+                
+                // Determine high boundary based on volume imbalance
+                double high = hasVolumeImbalance1 ? bar1.Close : bar1.Low;
+                
+                // Check for volume imbalance between candle2 and candle3
+                bool hasVolumeImbalance2 = bar2.Close > bar3.Open;
+                
+                // Determine low boundary based on volume imbalance
+                double low = hasVolumeImbalance2 ? bar3.Open : bar3.High;
+                
+                // Create a bearish FVG level
+                var bearishFVG = new Level(
+                    LevelType.FairValueGap,
+                    low,
+                    high,
+                    bar3.OpenTime,
+                    bar1.OpenTime,
+                    bar2.OpenTime,
+                    Direction.Down,
+                    currentIndex - 2,
+                    currentIndex - 2,
+                    currentIndex,
+                    currentIndex - 1, // Store the middle candle index for Gauntlet detection
+                    Zone.Discount  // FVGs in a downtrend are typically in the Discount zone
+                );
+                
+                // Add to collection - always store FVGs regardless of visibility setting
+                _fvgs.Add(bearishFVG);
+                
+                // Draw the FVG if visualization is enabled
+                if (_showFVG)
+                {
+                    DrawFVG(bearishFVG);
+                }
+                
+                // Check for bearish order block
+                if (_showOrderBlock && currentIndex >= 3 && _swingPointDetector != null)
+                {
+                    // First, check if candle1 is a swing point (specifically a swing high)
+                    // We're looking for an opposing swing point in the direction of the recent swing
+                    var bar1SwingPoint = _swingPointDetector.GetSwingPointAtIndex(currentIndex - 2);
+                    
+                    // We need bar1 to be a swing high for a bearish order block
+                    if (bar1SwingPoint != null && bar1SwingPoint.Direction == Direction.Up)
+                    {
+                        // Get the most recent swing point before this one
+                        var previousSwingPoints = _swingPointDetector.GetAllSwingPoints()
+                            .Where(sp => sp.Index < currentIndex - 2)
+                            .OrderByDescending(sp => sp.Index)
+                            .ToList();
+                            
+                        // Find the most recent swing low (for confirming directional alignment)
+                        var lastSwingLow = previousSwingPoints
+                            .FirstOrDefault(sp => sp.Direction == Direction.Down);
+                            
+                        // Check if we've swept a previous swing high
+                        bool sweptPreviousHigh = false;
+                        var previousSwingHigh = previousSwingPoints
+                            .FirstOrDefault(sp => sp.Direction == Direction.Up);
+                            
+                        if (previousSwingHigh != null)
+                        {
+                            sweptPreviousHigh = bar1.High >= previousSwingHigh.Price && 
+                                               bar1.Close < previousSwingHigh.Price;
+                        }
+                        
+                        // Verify that the candle meets our order block criteria:
+                        // 1. It's a swing high
+                        // 2. Either it swept a previous swing high OR it came after a swing low
+                        if (sweptPreviousHigh || (lastSwingLow != null && lastSwingLow.Index < bar1SwingPoint.Index))
+                        {
+                            CreateBearishOrderBlock(bars, bar1, currentIndex - 2);
+                        }
+                    }
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Creates a bullish order block from a candle
+        /// </summary>
+        private void CreateBullishOrderBlock(Bars bars, Bar bar, int index)
+        {
+            // Create an order block from the candle's FULL range (high to low)
+            var orderBlock = new Level(
+                LevelType.OrderBlock,
+                bar.Low,              // Use the full candle low
+                bar.High,             // Use the full candle high
+                bar.OpenTime,
+                bar.OpenTime.AddMinutes(5),     // 5 minute span for visualization
+                bar.OpenTime,
+                Direction.Up,
+                index,
+                index,
+                index
+            );
+            
+            // Check if we already have this order block to avoid duplicates
+            if (!_orderBlocks.Any(ob => 
+                ob.Index == orderBlock.Index && 
+                ob.Direction == orderBlock.Direction))
+            {
+                _orderBlocks.Add(orderBlock);
+                
+                // Draw the order block if visualization is enabled
+                if (_showOrderBlock)
+                {
+                    DrawOrderBlock(orderBlock);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Creates a bearish order block from a candle
+        /// </summary>
+        private void CreateBearishOrderBlock(Bars bars, Bar bar, int index)
+        {
+            // Create an order block from the candle's FULL range (high to low)
+            var orderBlock = new Level(
+                LevelType.OrderBlock,
+                bar.Low,              // Use the full candle low
+                bar.High,             // Use the full candle high
+                bar.OpenTime,
+                bar.OpenTime.AddMinutes(5),     // 5 minute span for visualization
+                bar.OpenTime,
+                Direction.Down,
+                index,
+                index,
+                index
+            );
+            
+            // Check if we already have this order block to avoid duplicates
+            if (!_orderBlocks.Any(ob => 
+                ob.Index == orderBlock.Index && 
+                ob.Direction == orderBlock.Direction))
+            {
+                _orderBlocks.Add(orderBlock);
+                
+                // Draw the order block if visualization is enabled
+                if (_showOrderBlock)
+                {
+                    DrawOrderBlock(orderBlock);
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Draws a Fair Value Gap on the chart
+        /// </summary>
+        private void DrawFVG(Level fvg)
+        {
+            if (_chart == null)
+                return;
+                
+            // Create a unique ID for this FVG
+            string id = $"fvg-{fvg.Direction}-{fvg.Index}-{fvg.IndexHigh}-{fvg.IndexLow}";
+            
+            // Use the extended chart extension method for better FVG visualization
+            _chart.DrawFairValueGap(fvg, id);
+        }
+        
+        /// <summary>
+        /// Draws an Order Block on the chart
+        /// </summary>
+        private void DrawOrderBlock(Level orderBlock)
+        {
+            if (_chart == null)
+                return;
+                
+            // Create a unique ID for this order block
+            string id = $"ob-{orderBlock.Direction}-{orderBlock.Index}";
+            
+            // Draw rectangle with 5-minute duration
+            _chart.DrawRectangle(
+                orderBlock,
+                id,
+                true, // Draw midpoint
+                20    // Higher opacity for order blocks to make them more visible
+            );
+        }
+        
+        /// <summary>
+        /// Checks if a level is in a Fair Value Gap
+        /// </summary>
+        public bool IsInFVG(double price, DateTime time)
+        {
+            return _fvgs.Any(fvg => price >= fvg.Low && price <= fvg.High && time >= fvg.LowTime && time <= fvg.HighTime.AddMinutes(5));
+        }
+        
+        /// <summary>
+        /// Checks if a level is in an Order Block
+        /// </summary>
+        public bool IsInOrderBlock(double price, DateTime time)
+        {
+            return _orderBlocks.Any(ob => 
+                price >= ob.Low && 
+                price <= ob.High && 
+                time >= ob.LowTime);
+        }
+        
+        /// <summary>
+        /// Get all FVGs
+        /// </summary>
+        public List<Level> GetAllFVGs()
+        {
+            return _fvgs;
+        }
+        
+        /// <summary>
+        /// Get bullish FVGs
+        /// </summary>
+        public List<Level> GetBullishFVGs()
+        {
+            return _fvgs.Where(f => f.Direction == Direction.Up).ToList();
+        }
+        
+        /// <summary>
+        /// Get bearish FVGs
+        /// </summary>
+        public List<Level> GetBearishFVGs()
+        {
+            return _fvgs.Where(f => f.Direction == Direction.Down).ToList();
+        }
+        
+        /// <summary>
+        /// Get all Order Blocks
+        /// </summary>
+        public List<Level> GetAllOrderBlocks()
+        {
+            return _orderBlocks;
+        }
+        
+        /// <summary>
+        /// Get bullish Order Blocks
+        /// </summary>
+        public List<Level> GetBullishOrderBlocks()
+        {
+            return _orderBlocks.Where(ob => ob.Direction == Direction.Up).ToList();
+        }
+        
+        /// <summary>
+        /// Get bearish Order Blocks
+        /// </summary>
+        public List<Level> GetBearishOrderBlocks()
+        {
+            return _orderBlocks.Where(ob => ob.Direction == Direction.Down).ToList();
+        }
+
+        #endregion
+
+        #region Order Flow Analysis
 
         /// <summary>
         /// Process a new swing point to update order flow tracking
@@ -112,6 +479,10 @@ namespace Zuva.Services
             }
 
             CheckCisdConfirmation(swingPoint, swingPoint.Index);
+            
+            // Check if the swing point is in a FVG or Order Block
+            swingPoint.IsInFVG = IsInFVG(swingPoint.Price, swingPoint.Time);
+            swingPoint.IsInOrderBlock = IsInOrderBlock(swingPoint.Price, swingPoint.Time);
         }
 
         /// <summary>
@@ -524,21 +895,20 @@ namespace Zuva.Services
         /// </summary>
         private void CheckForGauntlet(Level orderflow, int sweepingCandleIndex)
         {
-            // Skip if no FVG detector available or index is invalid
-            if (_fvgDetector == null || sweepingCandleIndex < 1 || sweepingCandleIndex >= Bars.Count)
+            // Skip if index is invalid
+            if (sweepingCandleIndex < 1 || sweepingCandleIndex >= Bars.Count)
                 return;
 
             // Skip if the orderflow doesn't have swept liquidity
             if (orderflow.SweptSwingPoint == null)
                 return;
 
-            // Get all FVGs from the detector
-            var allFvgs = _fvgDetector.GetAllFVGs();
-            if (allFvgs == null || allFvgs.Count == 0)
+            // Get all FVGs
+            if (_fvgs == null || _fvgs.Count == 0)
                 return;
 
             // First, find the last FVG within the orderflow
-            var gauntletFVG = FindLastFVGInOrderflow(orderflow, allFvgs);
+            var gauntletFVG = FindLastFVGInOrderflow(orderflow, _fvgs);
 
             // If we found a matching FVG, check if the sweeping candle is part of it
             if (gauntletFVG != null)
@@ -877,6 +1247,10 @@ namespace Zuva.Services
                 25 // Higher opacity for Gauntlets
             );
         }
+
+        #endregion
+
+        #region CISD and Breaker Blocks
 
         // Detect CISD from orderflow that swept liquidity
         private void DetectCisdLevel(Level orderflow)
@@ -1383,11 +1757,15 @@ namespace Zuva.Services
             );
         }
 
+        #endregion
+
+        #region Unicorn Detection
+
         // Add a new method to check for Unicorns when a new FVG is detected
         public void CheckForUnicorns(Level fvg)
         {
-            // Skip if FVG detector isn't available or we don't have confirmed CISDs yet
-            if (_fvgDetector == null || fvg == null)
+            // Skip if we don't have confirmed CISDs yet
+            if (fvg == null)
                 return;
 
             // Get all confirmed CISDs that have breaker blocks
@@ -1443,7 +1821,7 @@ namespace Zuva.Services
             }
         }
 
-// Helper method to check if two levels intersect
+        // Helper method to check if two levels intersect
         private bool CheckIntersection(Level level1, Level level2)
         {
             // Check for price range intersection
@@ -1462,7 +1840,7 @@ namespace Zuva.Services
             return priceIntersects && timeIntersects;
         }
 
-// Method to draw a Unicorn visualization
+        // Method to draw a Unicorn visualization
         private void DrawUnicorn(Level unicorn)
         {
             if (_chart == null)
@@ -1508,7 +1886,11 @@ namespace Zuva.Services
                 unicornColor);
         }
 
-// Getter methods for Unicorns
+        #endregion
+
+        #region Getters for all pattern types
+
+        // Getter methods for Unicorns
         public List<Level> GetAllUnicorns()
         {
             return _unicorns;
@@ -1527,51 +1909,38 @@ namespace Zuva.Services
                 .FirstOrDefault();
         }
 
-        // Add method to get all CISD levels
+        // CISD getters
         public List<Level> GetAllCISDLevels()
         {
             return _cisdLevels;
         }
 
-        // Add method to get active CISD levels
         public List<Level> GetActiveCISDLevels()
         {
             return _cisdLevels.Where(cisd => cisd.Activated).ToList();
         }
 
-        // Add method to get confirmed CISD levels
         public List<Level> GetConfirmedCISDLevels()
         {
             return _cisdLevels.Where(cisd => cisd.IsConfirmed).ToList();
         }
 
-        /// <summary>
-        /// Gets all order flow levels
-        /// </summary>
+        // Order flow getters
         public List<Level> GetPdArrays()
         {
             return _pdArrays;
         }
 
-        /// <summary>
-        /// Gets all bullish order flow levels
-        /// </summary>
         public List<Level> GetBullishPdArrays()
         {
             return _pdArrays.Where(l => l.Direction == Direction.Up).ToList();
         }
 
-        /// <summary>
-        /// Gets all bearish order flow levels
-        /// </summary>
         public List<Level> GetBearishPdArrays()
         {
             return _pdArrays.Where(l => l.Direction == Direction.Down).ToList();
         }
 
-        /// <summary>
-        /// Gets the most recent bullish order flow level
-        /// </summary>
         public Level GetLastBullishPdArray()
         {
             return _pdArrays.Where(l => l.Direction == Direction.Up)
@@ -1579,9 +1948,6 @@ namespace Zuva.Services
                 .FirstOrDefault();
         }
 
-        /// <summary>
-        /// Gets the most recent bearish order flow level
-        /// </summary>
         public Level GetLastBearishPdArray()
         {
             return _pdArrays.Where(l => l.Direction == Direction.Down)
@@ -1589,31 +1955,24 @@ namespace Zuva.Services
                 .FirstOrDefault();
         }
 
-        /// <summary>
-        /// Gets all order flow levels that swept liquidity
-        /// </summary>
+        // Liquidity sweep getters
         public List<Level> GetLiquiditySweepLevels()
         {
             return _pdArrays.Where(l => l.SweptSwingPoint != null).ToList();
         }
 
-        /// <summary>
-        /// Gets all Gauntlets
-        /// </summary>
+        // Gauntlet getters
         public List<Level> GetGauntlets()
         {
             return _gauntlets;
         }
 
-        /// <summary>
-        /// Gets all Gauntlets that match the given direction
-        /// </summary>
         public List<Level> GetGauntlets(Direction direction)
         {
             return _gauntlets.Where(g => g.Direction == direction).ToList();
         }
 
-        // Add to PdArrayAnalyzer class
+        // Breaker Block getters
         public List<Level> GetAllBreakerBlocks()
         {
             return _breakerBlocks;
@@ -1629,9 +1988,7 @@ namespace Zuva.Services
             return _breakerBlocks.Where(b => b.Direction == Direction.Down).ToList();
         }
 
-        /// <summary>
-        /// Initialize with existing swing points
-        /// </summary>
+        // Initialize with existing swing points
         public void Initialize(List<SwingPoint> swingPoints)
         {
             if (swingPoints == null || swingPoints.Count < 3) // Need at least 3 points to form an orderflow
@@ -1659,7 +2016,13 @@ namespace Zuva.Services
                 {
                     ProcessNewSwingHigh(currentPoint);
                 }
+
+                // Check if the swing point is in a FVG or Order Block
+                currentPoint.IsInFVG = IsInFVG(currentPoint.Price, currentPoint.Time);
+                currentPoint.IsInOrderBlock = IsInOrderBlock(currentPoint.Price, currentPoint.Time);
             }
         }
+
+        #endregion
     }
 }

@@ -104,9 +104,6 @@ namespace Zuva
         // PD Array analyzer
         private PdArrayAnalyzer _pdArrayAnalyzer;
 
-        // FVG detector
-        private FvgDetector _fvgDetector;
-        
         // Time Manager
         private TimeManager _timeManager;
 
@@ -145,20 +142,7 @@ namespace Zuva
                 ShowMacros = false;
             }
 
-            // Initialize FVG detector with order block support
-            try
-            {
-                _fvgDetector = new FvgDetector(Chart, ShowFVG, ShowOrderBlock, _swingDetector);
-            }
-            catch (Exception ex)
-            {
-                Print("Error initializing FVG Detector: " + ex.Message);
-                // Disable to prevent further errors
-                ShowFVG = false;
-                ShowOrderBlock = false;
-            }
-
-            // Initialize PD Array analyzer
+            // Initialize PD Array analyzer with integrated FVG detection
             try
             {
                 _pdArrayAnalyzer = new PdArrayAnalyzer(
@@ -167,11 +151,13 @@ namespace Zuva
                     ShowOrderFlow, 
                     ShowLiquiditySweep, 
                     ShowGauntlet,
-                    _fvgDetector,
+                    ShowFVG,                 // Pass ShowFVG directly
+                    ShowOrderBlock,          // Pass ShowOrderBlock directly
                     ShowCISD,
                     ShowBreakerBlock,
                     ShowUnicorn,
-                    MaxCisdsPerDirection,
+                    MaxCisdsPerDirection, 
+                    _swingDetector,          // Pass swing detector for order block detection
                     message => Print(message));
             }
             catch (Exception ex)
@@ -181,6 +167,8 @@ namespace Zuva
                 ShowOrderFlow = false;
                 ShowLiquiditySweep = false;
                 ShowGauntlet = false;
+                ShowFVG = false;
+                ShowOrderBlock = false;
             }
 
             // Initialize market structure analyzer if enabled
@@ -244,14 +232,14 @@ namespace Zuva
                 }
             }
             
-            // Process for FVG and Order Block detection
-            if (_fvgDetector != null)
+            // Process for FVG and Order Block detection (now using PdArrayAnalyzer)
+            if (_pdArrayAnalyzer != null)
             {
                 try
                 {
-                    _fvgDetector.DetectFVG(Bars, _previousBarIndex);
+                    _pdArrayAnalyzer.DetectFVG(Bars, _previousBarIndex);
                     
-                    var allFvgs = _fvgDetector.GetAllFVGs();
+                    var allFvgs = _pdArrayAnalyzer.GetAllFVGs();
                     if (allFvgs != null && allFvgs.Count > 0)
                     {
                         // Get the most recent FVG
@@ -305,13 +293,6 @@ namespace Zuva
                                     // Process the new swing point for market structure analysis
                                     _marketStructureAnalyzer.ProcessSwingPoint(swingPoint);
                                 }
-                            }
-                            
-                            // Check if the swing point is in a FVG or Order Block
-                            if (_fvgDetector != null)
-                            {
-                                swingPoint.IsInFVG = _fvgDetector.IsInFVG(swingPoint.Price, swingPoint.Time);
-                                swingPoint.IsInOrderBlock = _fvgDetector.IsInOrderBlock(swingPoint.Price, swingPoint.Time);
                             }
                             
                             // Process for PD Array analysis
@@ -458,36 +439,36 @@ namespace Zuva
             return _pdArrayAnalyzer?.GetLastBearishPdArray();
         }
         
-        // Get FVG information
+        // Get FVG information - now using PdArrayAnalyzer
         public List<Level> GetAllFVGs()
         {
-            return _fvgDetector?.GetAllFVGs() ?? new List<Level>();
+            return _pdArrayAnalyzer?.GetAllFVGs() ?? new List<Level>();
         }
         
         public List<Level> GetBullishFVGs()
         {
-            return _fvgDetector?.GetBullishFVGs() ?? new List<Level>();
+            return _pdArrayAnalyzer?.GetBullishFVGs() ?? new List<Level>();
         }
         
         public List<Level> GetBearishFVGs()
         {
-            return _fvgDetector?.GetBearishFVGs() ?? new List<Level>();
+            return _pdArrayAnalyzer?.GetBearishFVGs() ?? new List<Level>();
         }
         
-        // Get Order Block information
+        // Get Order Block information - now using PdArrayAnalyzer
         public List<Level> GetAllOrderBlocks()
         {
-            return _fvgDetector?.GetAllOrderBlocks() ?? new List<Level>();
+            return _pdArrayAnalyzer?.GetAllOrderBlocks() ?? new List<Level>();
         }
         
         public List<Level> GetBullishOrderBlocks()
         {
-            return _fvgDetector?.GetBullishOrderBlocks() ?? new List<Level>();
+            return _pdArrayAnalyzer?.GetBullishOrderBlocks() ?? new List<Level>();
         }
         
         public List<Level> GetBearishOrderBlocks()
         {
-            return _fvgDetector?.GetBearishOrderBlocks() ?? new List<Level>();
+            return _pdArrayAnalyzer?.GetBearishOrderBlocks() ?? new List<Level>();
         }
         
         // Get orderflow levels that swept liquidity
