@@ -1776,13 +1776,14 @@ namespace Zuva.Services
 
             // Get all confirmed CISDs that have breaker blocks
             var confirmedCisdsWithBreakers = _cisdLevels
-                .Where(cisd => cisd.IsConfirmed && cisd.BreakerBlock != null)
+                .Where(cisd => cisd.IsConfirmed && !cisd.Activated && cisd.BreakerBlock != null)
                 .ToList();
 
             foreach (var cisd in confirmedCisdsWithBreakers)
             {
                 // Check if one of the FVG candles is the CISD confirming candle
                 bool fvgInvolvesCisdCandle = false;
+                bool passesDirectionalRequirement = false;
 
                 if (fvg.Direction == Direction.Up) // Bullish FVG
                 {
@@ -1791,6 +1792,8 @@ namespace Zuva.Services
                         fvg.Index == cisd.IndexOfConfirmingCandle ||
                         fvg.IndexMid == cisd.IndexOfConfirmingCandle ||
                         fvg.IndexHigh == cisd.IndexOfConfirmingCandle;
+                    
+                    passesDirectionalRequirement = fvg.Low < cisd.High;
                 }
                 else // Direction.Down (Bearish FVG)
                 {
@@ -1799,30 +1802,31 @@ namespace Zuva.Services
                         fvg.Index == cisd.IndexOfConfirmingCandle ||
                         fvg.IndexMid == cisd.IndexOfConfirmingCandle ||
                         fvg.IndexLow == cisd.IndexOfConfirmingCandle;
+                    
+                    passesDirectionalRequirement = fvg.High > cisd.Low;
                 }
 
                 // If the FVG involves the CISD confirming candle, check for intersection with breaker block
-                if (fvgInvolvesCisdCandle)
+                if (!fvgInvolvesCisdCandle || !passesDirectionalRequirement) continue;
+                
+                bool intersectsWithBreaker = CheckIntersection(fvg, cisd.BreakerBlock);
+
+                if (intersectsWithBreaker)
                 {
-                    bool intersectsWithBreaker = CheckIntersection(fvg, cisd.BreakerBlock);
+                    // This FVG is a Unicorn - mark it
+                    fvg.LevelType = LevelType.Unicorn;
 
-                    if (intersectsWithBreaker)
+                    // Add to unicorns collection
+                    _unicorns.Add(fvg);
+
+                    // Draw the unicorn if visualization is enabled
+                    if (_showUnicorn)
                     {
-                        // This FVG is a Unicorn - mark it
-                        fvg.LevelType = LevelType.Unicorn;
-
-                        // Add to unicorns collection
-                        _unicorns.Add(fvg);
-
-                        // Draw the unicorn if visualization is enabled
-                        if (_showUnicorn)
-                        {
-                            DrawUnicorn(fvg);
-                        }
-
-                        // Only need to find one match
-                        break;
+                        DrawUnicorn(fvg);
                     }
+
+                    // Only need to find one match
+                    break;
                 }
             }
         }
