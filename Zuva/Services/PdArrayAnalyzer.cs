@@ -1330,9 +1330,8 @@ namespace Zuva.Services
             if (startIndex < 0 || endIndex < 0 || startIndex >= Bars.Count || endIndex >= Bars.Count)
                 return new List<int>();
 
-            // Scan the orderflow from the end to find the last set of consecutive candles
-            // We'll scan backward from the end of the orderflow to find the first break
             List<int> lastConsecutiveCandles = new List<int>();
+            bool foundFirstMatchingCandle = false;
 
             // Start from the end and work backward
             for (int i = endIndex; i >= startIndex; i--)
@@ -1344,10 +1343,15 @@ namespace Zuva.Services
                 {
                     // Add to our consecutive candles collection
                     lastConsecutiveCandles.Insert(0, i); // Insert at beginning to maintain correct order
+                    foundFirstMatchingCandle = true; // We've found at least one matching candle
                 }
                 else
                 {
-                    // Once we hit a candle of the opposite direction, we've found the last set
+                    // If we haven't found any matching candles yet, continue searching
+                    if (!foundFirstMatchingCandle)
+                        continue;
+            
+                    // Once we hit a candle of the opposite direction AFTER finding matching candles, we break
                     break;
                 }
             }
