@@ -14,6 +14,7 @@ namespace Zuva.Services
         private readonly Chart _chart;
         private readonly List<TimeRange> _macros;
         private readonly bool _showMacros;
+        private readonly int _utcOffset;
         
         // Keep track of which macro times we've already drawn lines for to avoid duplication
         private readonly HashSet<string> _drawnMacroTimes = new HashSet<string>();
@@ -21,10 +22,11 @@ namespace Zuva.Services
         /// <summary>
         /// Creates a new instance of the TimeManager
         /// </summary>
-        public TimeManager(Chart chart, bool showMacros = true)
+        public TimeManager(Chart chart, bool showMacros = true, int utcOffset = -4)
         {
             _chart = chart;
             _showMacros = showMacros;
+            _utcOffset = utcOffset;
             _macros = InitializeMacros();
         }
         
@@ -63,28 +65,31 @@ namespace Zuva.Services
             if (!_showMacros || _chart == null)
                 return;
             
-            DateTime dateOnly = time.Date;
-            TimeSpan timeOfDay = time.TimeOfDay;
+            // Adjust time for UTC offset to get the market time
+            DateTime marketTime = time.AddHours(_utcOffset);
+            DateTime dateOnly = marketTime.Date;
+            TimeSpan timeOfDay = marketTime.TimeOfDay;
             
-            // Check if this bar's time matches any macro start time
+            // Check if this bar's market time matches any macro start time
             foreach (var macro in _macros)
             {
-                // Create the full datetime for this macro's start time on the current date
-                DateTime macroStartTime = dateOnly.Add(macro.StartTime);
-                DateTime macroEndTime = dateOnly.Add(macro.EndTime);
-                
                 // Create a unique identifier for this macro on this date
                 string macroKey = $"{dateOnly.ToString("yyyyMMdd")}-{macro.StartTime.Hours:D2}{macro.StartTime.Minutes:D2}";
                 
-                // See if this bar's time is close to a macro start time (within 1 minute)
+                // See if this bar's market time is close to a macro start time (within 1 minute)
                 bool closeToMacroStart = Math.Abs((timeOfDay - macro.StartTime).TotalMinutes) < 1;
                 
                 // If this is a macro start time and we haven't drawn it yet
                 if (closeToMacroStart && !_drawnMacroTimes.Contains(macroKey))
                 {
                     // Draw both the start and end lines for this macro
-                    DrawMacroLine(macroStartTime, "start");
-                    DrawMacroLine(macroEndTime, "end");
+                    DrawMacroLine(time, "start");
+                    
+                    // Calculate the end time in chart time
+                    TimeSpan macroDuration = macro.EndTime - macro.StartTime;
+                    DateTime endTime = time.Add(macroDuration);
+                    
+                    DrawMacroLine(endTime, "end");
                     
                     // Mark this macro as drawn
                     _drawnMacroTimes.Add(macroKey);
@@ -112,7 +117,9 @@ namespace Zuva.Services
         /// </summary>
         public bool IsInMacroTime(DateTime time)
         {
-            TimeSpan timeOfDay = time.TimeOfDay;
+            // Adjust time for UTC offset to get the market time
+            DateTime marketTime = time.AddHours(_utcOffset);
+            TimeSpan timeOfDay = marketTime.TimeOfDay;
             
             foreach (var macro in _macros)
             {

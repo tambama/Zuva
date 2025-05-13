@@ -19,6 +19,8 @@ namespace Zuva
 
         [Parameter("HTF", DefaultValue = "H1")]
         public string HTF { get; set; }
+        [Parameter("UTC Offset", Group = "Time Management", DefaultValue = -4)]
+        public int UtcOffset { get; set; }
         
         [Parameter("Show Macro Times", Group = "Time Management", DefaultValue = true)]
         public bool ShowMacros { get; set; }
@@ -131,7 +133,7 @@ namespace Zuva
             
             try
             {
-                _timeManager = new TimeManager(Chart, ShowMacros);
+                _timeManager = new TimeManager(Chart, ShowMacros, UtcOffset);
             }
             catch (Exception ex)
             {
