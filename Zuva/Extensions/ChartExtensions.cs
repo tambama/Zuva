@@ -5,7 +5,7 @@ namespace Mwenje.Extensions
 {
     public static class ChartExtensions
     {
-        public static void DrawStraightLine(this Chart chart, string id, DateTime startTime, double startPrice, DateTime endTime, double endPrice, string label = null, LineStyle lineStyle = LineStyle.Solid, Color color = null, bool hasLabel = false, bool removeExisting = false, bool extended = false)
+        public static void DrawStraightLine(this Chart chart, string id, DateTime startTime, double startPrice, DateTime endTime, double endPrice, string label = null, LineStyle lineStyle = LineStyle.Solid, Color color = null, bool hasLabel = false, bool removeExisting = false, bool extended = false, bool editable = false)
         {
             color ??= Color.Wheat;
 
@@ -19,6 +19,11 @@ namespace Mwenje.Extensions
             if (extended)
             {
                 line.ExtendToInfinity = true;
+            }
+
+            if (editable)
+            {
+                line.IsInteractive = true;
             }
 
             if (!hasLabel) return;

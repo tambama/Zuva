@@ -10,6 +10,11 @@ namespace Zuva.Extensions
             return candle.Close > candle.Open ? Direction.Up : Direction.Down;
         }
 
+        public static Direction GetCandleDirection(this Candle candle)
+        {
+            return candle.Close > candle.Open ? Direction.Up : Direction.Down;
+        }
+
         /// <summary>
         /// Returns the minimum/maximum prices levels during an specific time period
         /// </summary>
