@@ -148,6 +148,9 @@ namespace Zuva.Services
                 // Add to collection - always store FVGs regardless of visibility setting
                 _fvgs.Add(bullishFVG);
                 
+                // Check if this FVG is a Unicorn
+                CheckForUnicorns(bullishFVG);
+                
                 // Draw the FVG if visualization is enabled
                 if (_showFVG)
                 {
@@ -229,6 +232,9 @@ namespace Zuva.Services
                 
                 // Add to collection - always store FVGs regardless of visibility setting
                 _fvgs.Add(bearishFVG);
+                
+                // Check if this FVG is a Unicorn
+                CheckForUnicorns(bearishFVG);
                 
                 // Draw the FVG if visualization is enabled
                 if (_showFVG)
@@ -1827,17 +1833,8 @@ namespace Zuva.Services
             // Check for price range intersection
             bool priceIntersects = !(level1.High < level2.Low || level1.Low > level2.High);
 
-            // Check for time range intersection
-            DateTime level1Start = level1.Direction == Direction.Up ? level1.LowTime : level1.HighTime;
-            DateTime level1End = level1.Direction == Direction.Up ? level1.HighTime : level1.LowTime;
-
-            DateTime level2Start = level2.Direction == Direction.Up ? level2.LowTime : level2.HighTime;
-            DateTime level2End = level2.Direction == Direction.Up ? level2.HighTime : level2.LowTime;
-
-            bool timeIntersects = !(level1End < level2Start || level1Start > level2End);
-
             // Both price and time must intersect
-            return priceIntersects && timeIntersects;
+            return priceIntersects;
         }
 
         // Method to draw a Unicorn visualization
@@ -1850,7 +1847,7 @@ namespace Zuva.Services
             string id = $"unicorn-{unicorn.Direction}-{unicorn.Index}-{unicorn.IndexHigh}-{unicorn.IndexLow}";
 
             // Draw with a distinctive style - red solid line as specified in LineType.Unicorn style
-            Color unicornColor = Color.Red;
+            Color unicornColor = unicorn.Direction == Direction.Up ? Color.Green : Color.Pink;
 
             // Draw a distinctive pattern - rectangle with higher opacity
             var rectangle = _chart.DrawRectangle(
@@ -1862,7 +1859,7 @@ namespace Zuva.Services
                 unicornColor);
 
             rectangle.IsFilled = true;
-            rectangle.Color = Color.FromArgb(30, unicornColor); // Higher opacity for Unicorns
+            rectangle.Color = Color.FromArgb(50, unicornColor); // Higher opacity for Unicorns
 
             // Draw solid midline to make it stand out
             string midLineId = $"{id}-midline";
@@ -1874,16 +1871,7 @@ namespace Zuva.Services
                 unicorn.Mid,
                 unicornColor,
                 2, // Thicker line
-                LineStyle.Solid); // Solid line for Unicorns
-
-            // Add a small label to identify it as a Unicorn
-            string labelId = $"{id}-label";
-            _chart.DrawText(
-                labelId,
-                "UNI",
-                unicorn.LowTime,
-                unicorn.Mid,
-                unicornColor);
+                LineStyle.Dots); // Solid line for Unicorns
         }
 
         #endregion
