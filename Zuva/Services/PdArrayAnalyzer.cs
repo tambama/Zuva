@@ -108,27 +108,27 @@ namespace Zuva.Services
             // Need at least 3 bars to detect a FVG
             if (currentIndex < 2)
                 return;
-                
+
             // Get the three consecutive bars
             var bar1 = bars[currentIndex - 2]; // First candle (order block candidate)
             var bar2 = bars[currentIndex - 1]; // Middle candle
-            var bar3 = bars[currentIndex];     // Last candle
-            
+            var bar3 = bars[currentIndex]; // Last candle
+
             // Check for bullish FVG (bar1's high is lower than bar3's low)
             if (bar1.High < bar3.Low)
             {
                 // Check for volume imbalance between candle1 and candle2
                 bool hasVolumeImbalance1 = bar1.Close < bar2.Open;
-                
+
                 // Determine low boundary based on volume imbalance
                 double low = hasVolumeImbalance1 ? bar1.Close : bar1.High;
-                
+
                 // Check for volume imbalance between candle2 and candle3
                 bool hasVolumeImbalance2 = bar2.Close < bar3.Open;
-                
+
                 // Determine high boundary based on volume imbalance
                 double high = hasVolumeImbalance2 ? bar3.Open : bar3.Low;
-                
+
                 // Create a bullish FVG level
                 var bullishFVG = new Level(
                     LevelType.FairValueGap,
@@ -142,28 +142,28 @@ namespace Zuva.Services
                     currentIndex,
                     currentIndex - 2,
                     currentIndex - 1, // Store the middle candle index for Gauntlet detection
-                    Zone.Premium  // FVGs in an uptrend are typically in the Premium zone
+                    Zone.Premium // FVGs in an uptrend are typically in the Premium zone
                 );
-                
+
                 // Add to collection - always store FVGs regardless of visibility setting
                 _fvgs.Add(bullishFVG);
-                
+
                 // Check if this FVG is a Unicorn
                 CheckForUnicorns(bullishFVG);
-                
+
                 // Draw the FVG if visualization is enabled
                 if (_showFVG)
                 {
                     DrawFVG(bullishFVG);
                 }
-                
+
                 // Check for bullish order block
                 if (_showOrderBlock && currentIndex >= 3 && _swingPointDetector != null)
                 {
                     // First, check if candle1 is a swing point (specifically a swing low)
                     // We're looking for an opposing swing point in the direction of the recent swing
                     var bar1SwingPoint = _swingPointDetector.GetSwingPointAtIndex(currentIndex - 2);
-                    
+
                     // We need bar1 to be a swing low for a bullish order block
                     if (bar1SwingPoint != null && bar1SwingPoint.Direction == Direction.Down)
                     {
@@ -172,22 +172,22 @@ namespace Zuva.Services
                             .Where(sp => sp.Index < currentIndex - 2)
                             .OrderByDescending(sp => sp.Index)
                             .ToList();
-                            
+
                         // Find the most recent swing high (for confirming directional alignment)
                         var lastSwingHigh = previousSwingPoints
                             .FirstOrDefault(sp => sp.Direction == Direction.Up);
-                            
+
                         // Check if we've swept a previous swing low
                         bool sweptPreviousLow = false;
                         var previousSwingLow = previousSwingPoints
                             .FirstOrDefault(sp => sp.Direction == Direction.Down);
-                            
+
                         if (previousSwingLow != null)
                         {
-                            sweptPreviousLow = bar1.Low <= previousSwingLow.Price && 
-                                              bar1.Close > previousSwingLow.Price;
+                            sweptPreviousLow = bar1.Low <= previousSwingLow.Price &&
+                                               bar1.Close > previousSwingLow.Price;
                         }
-                        
+
                         // Verify that the candle meets our order block criteria:
                         // 1. It's a swing low
                         // 2. Either it swept a previous swing low OR it came after a swing high
@@ -198,22 +198,22 @@ namespace Zuva.Services
                     }
                 }
             }
-            
+
             // Check for bearish FVG (bar1's low is higher than bar3's high)
             else if (bar1.Low > bar3.High)
             {
                 // Check for volume imbalance between candle1 and candle2
                 bool hasVolumeImbalance1 = bar1.Close > bar2.Open;
-                
+
                 // Determine high boundary based on volume imbalance
                 double high = hasVolumeImbalance1 ? bar1.Close : bar1.Low;
-                
+
                 // Check for volume imbalance between candle2 and candle3
                 bool hasVolumeImbalance2 = bar2.Close > bar3.Open;
-                
+
                 // Determine low boundary based on volume imbalance
                 double low = hasVolumeImbalance2 ? bar3.Open : bar3.High;
-                
+
                 // Create a bearish FVG level
                 var bearishFVG = new Level(
                     LevelType.FairValueGap,
@@ -227,28 +227,28 @@ namespace Zuva.Services
                     currentIndex - 2,
                     currentIndex,
                     currentIndex - 1, // Store the middle candle index for Gauntlet detection
-                    Zone.Discount  // FVGs in a downtrend are typically in the Discount zone
+                    Zone.Discount // FVGs in a downtrend are typically in the Discount zone
                 );
-                
+
                 // Add to collection - always store FVGs regardless of visibility setting
                 _fvgs.Add(bearishFVG);
-                
+
                 // Check if this FVG is a Unicorn
                 CheckForUnicorns(bearishFVG);
-                
+
                 // Draw the FVG if visualization is enabled
                 if (_showFVG)
                 {
                     DrawFVG(bearishFVG);
                 }
-                
+
                 // Check for bearish order block
                 if (_showOrderBlock && currentIndex >= 3 && _swingPointDetector != null)
                 {
                     // First, check if candle1 is a swing point (specifically a swing high)
                     // We're looking for an opposing swing point in the direction of the recent swing
                     var bar1SwingPoint = _swingPointDetector.GetSwingPointAtIndex(currentIndex - 2);
-                    
+
                     // We need bar1 to be a swing high for a bearish order block
                     if (bar1SwingPoint != null && bar1SwingPoint.Direction == Direction.Up)
                     {
@@ -257,22 +257,22 @@ namespace Zuva.Services
                             .Where(sp => sp.Index < currentIndex - 2)
                             .OrderByDescending(sp => sp.Index)
                             .ToList();
-                            
+
                         // Find the most recent swing low (for confirming directional alignment)
                         var lastSwingLow = previousSwingPoints
                             .FirstOrDefault(sp => sp.Direction == Direction.Down);
-                            
+
                         // Check if we've swept a previous swing high
                         bool sweptPreviousHigh = false;
                         var previousSwingHigh = previousSwingPoints
                             .FirstOrDefault(sp => sp.Direction == Direction.Up);
-                            
+
                         if (previousSwingHigh != null)
                         {
-                            sweptPreviousHigh = bar1.High >= previousSwingHigh.Price && 
-                                               bar1.Close < previousSwingHigh.Price;
+                            sweptPreviousHigh = bar1.High >= previousSwingHigh.Price &&
+                                                bar1.Close < previousSwingHigh.Price;
                         }
-                        
+
                         // Verify that the candle meets our order block criteria:
                         // 1. It's a swing high
                         // 2. Either it swept a previous swing high OR it came after a swing low
@@ -284,7 +284,7 @@ namespace Zuva.Services
                 }
             }
         }
-        
+
         /// <summary>
         /// Creates a bullish order block from a candle
         /// </summary>
@@ -293,24 +293,24 @@ namespace Zuva.Services
             // Create an order block from the candle's FULL range (high to low)
             var orderBlock = new Level(
                 LevelType.OrderBlock,
-                bar.Low,              // Use the full candle low
-                bar.High,             // Use the full candle high
+                bar.Low, // Use the full candle low
+                bar.High, // Use the full candle high
                 bar.OpenTime,
-                bar.OpenTime.AddMinutes(5),     // 5 minute span for visualization
+                bar.OpenTime.AddMinutes(5), // 5 minute span for visualization
                 bar.OpenTime,
                 Direction.Up,
                 index,
                 index,
                 index
             );
-            
+
             // Check if we already have this order block to avoid duplicates
-            if (!_orderBlocks.Any(ob => 
-                ob.Index == orderBlock.Index && 
-                ob.Direction == orderBlock.Direction))
+            if (!_orderBlocks.Any(ob =>
+                    ob.Index == orderBlock.Index &&
+                    ob.Direction == orderBlock.Direction))
             {
                 _orderBlocks.Add(orderBlock);
-                
+
                 // Draw the order block if visualization is enabled
                 if (_showOrderBlock)
                 {
@@ -318,7 +318,7 @@ namespace Zuva.Services
                 }
             }
         }
-        
+
         /// <summary>
         /// Creates a bearish order block from a candle
         /// </summary>
@@ -327,24 +327,24 @@ namespace Zuva.Services
             // Create an order block from the candle's FULL range (high to low)
             var orderBlock = new Level(
                 LevelType.OrderBlock,
-                bar.Low,              // Use the full candle low
-                bar.High,             // Use the full candle high
+                bar.Low, // Use the full candle low
+                bar.High, // Use the full candle high
                 bar.OpenTime,
-                bar.OpenTime.AddMinutes(5),     // 5 minute span for visualization
+                bar.OpenTime.AddMinutes(5), // 5 minute span for visualization
                 bar.OpenTime,
                 Direction.Down,
                 index,
                 index,
                 index
             );
-            
+
             // Check if we already have this order block to avoid duplicates
-            if (!_orderBlocks.Any(ob => 
-                ob.Index == orderBlock.Index && 
-                ob.Direction == orderBlock.Direction))
+            if (!_orderBlocks.Any(ob =>
+                    ob.Index == orderBlock.Index &&
+                    ob.Direction == orderBlock.Direction))
             {
                 _orderBlocks.Add(orderBlock);
-                
+
                 // Draw the order block if visualization is enabled
                 if (_showOrderBlock)
                 {
@@ -352,7 +352,7 @@ namespace Zuva.Services
                 }
             }
         }
-        
+
         /// <summary>
         /// Draws a Fair Value Gap on the chart
         /// </summary>
@@ -360,14 +360,14 @@ namespace Zuva.Services
         {
             if (_chart == null)
                 return;
-                
+
             // Create a unique ID for this FVG
             string id = $"fvg-{fvg.Direction}-{fvg.Index}-{fvg.IndexHigh}-{fvg.IndexLow}";
-            
+
             // Use the extended chart extension method for better FVG visualization
             _chart.DrawFairValueGap(fvg, id);
         }
-        
+
         /// <summary>
         /// Draws an Order Block on the chart
         /// </summary>
@@ -375,38 +375,39 @@ namespace Zuva.Services
         {
             if (_chart == null)
                 return;
-                
+
             // Create a unique ID for this order block
             string id = $"ob-{orderBlock.Direction}-{orderBlock.Index}";
-            
+
             // Draw rectangle with 5-minute duration
             _chart.DrawRectangle(
                 orderBlock,
                 id,
                 true, // Draw midpoint
-                20    // Higher opacity for order blocks to make them more visible
+                20 // Higher opacity for order blocks to make them more visible
             );
         }
-        
+
         /// <summary>
         /// Checks if a level is in a Fair Value Gap
         /// </summary>
         public bool IsInFVG(double price, DateTime time)
         {
-            return _fvgs.Any(fvg => price >= fvg.Low && price <= fvg.High && time >= fvg.LowTime && time <= fvg.HighTime.AddMinutes(5));
+            return _fvgs.Any(fvg =>
+                price >= fvg.Low && price <= fvg.High && time >= fvg.LowTime && time <= fvg.HighTime.AddMinutes(5));
         }
-        
+
         /// <summary>
         /// Checks if a level is in an Order Block
         /// </summary>
         public bool IsInOrderBlock(double price, DateTime time)
         {
-            return _orderBlocks.Any(ob => 
-                price >= ob.Low && 
-                price <= ob.High && 
+            return _orderBlocks.Any(ob =>
+                price >= ob.Low &&
+                price <= ob.High &&
                 time >= ob.LowTime);
         }
-        
+
         /// <summary>
         /// Get all FVGs
         /// </summary>
@@ -414,7 +415,7 @@ namespace Zuva.Services
         {
             return _fvgs;
         }
-        
+
         /// <summary>
         /// Get bullish FVGs
         /// </summary>
@@ -422,7 +423,7 @@ namespace Zuva.Services
         {
             return _fvgs.Where(f => f.Direction == Direction.Up).ToList();
         }
-        
+
         /// <summary>
         /// Get bearish FVGs
         /// </summary>
@@ -430,7 +431,7 @@ namespace Zuva.Services
         {
             return _fvgs.Where(f => f.Direction == Direction.Down).ToList();
         }
-        
+
         /// <summary>
         /// Get all Order Blocks
         /// </summary>
@@ -438,7 +439,7 @@ namespace Zuva.Services
         {
             return _orderBlocks;
         }
-        
+
         /// <summary>
         /// Get bullish Order Blocks
         /// </summary>
@@ -446,7 +447,7 @@ namespace Zuva.Services
         {
             return _orderBlocks.Where(ob => ob.Direction == Direction.Up).ToList();
         }
-        
+
         /// <summary>
         /// Get bearish Order Blocks
         /// </summary>
@@ -485,7 +486,7 @@ namespace Zuva.Services
             }
 
             CheckCisdConfirmation(swingPoint, swingPoint.Index);
-            
+
             // Check if the swing point is in a FVG or Order Block
             swingPoint.IsInFVG = IsInFVG(swingPoint.Price, swingPoint.Time);
             swingPoint.IsInOrderBlock = IsInOrderBlock(swingPoint.Price, swingPoint.Time);
@@ -897,7 +898,6 @@ namespace Zuva.Services
 
         /// <summary>
         /// Checks if the sweeping candle is part of an FVG pattern to detect Gauntlets
-        /// by first finding the last FVG within the orderflow
         /// </summary>
         private void CheckForGauntlet(Level orderflow, int sweepingCandleIndex)
         {
@@ -914,75 +914,51 @@ namespace Zuva.Services
                 return;
 
             // First, find the last FVG within the orderflow
-            var gauntletFVG = FindLastFVGInOrderflow(orderflow, _fvgs);
+            var lastFvgInOrderflow = FindLastFVGInOrderflow(orderflow, _fvgs);
 
-            // If we found a matching FVG, check if the sweeping candle is part of it
-            if (gauntletFVG != null)
+            // If we found a matching FVG, check if its second or third candle is the sweeping candle
+            if (lastFvgInOrderflow != null)
             {
-                // Check if the sweeping candle is either the second or third candle of the FVG
                 bool isSweepingCandlePartOfFVG = false;
 
                 if (orderflow.Direction == Direction.Up)
                 {
-                    // For bullish FVGs, check if sweeping candle is either IndexMid or IndexHigh
+                    // For bullish FVGs, check if the sweeping candle matches either the middle or high candle
                     isSweepingCandlePartOfFVG =
-                        sweepingCandleIndex == gauntletFVG.IndexMid ||
-                        sweepingCandleIndex == gauntletFVG.IndexHigh;
+                        (lastFvgInOrderflow.IndexMid == sweepingCandleIndex) ||
+                        (lastFvgInOrderflow.IndexHigh == sweepingCandleIndex);
                 }
                 else // Direction.Down
                 {
-                    // For bearish FVGs, check if sweeping candle is either IndexMid or IndexLow
+                    // For bearish FVGs, check if the sweeping candle matches either the middle or low candle
                     isSweepingCandlePartOfFVG =
-                        sweepingCandleIndex == gauntletFVG.IndexMid ||
-                        sweepingCandleIndex == gauntletFVG.IndexLow;
+                        (lastFvgInOrderflow.IndexMid == sweepingCandleIndex) ||
+                        (lastFvgInOrderflow.IndexLow == sweepingCandleIndex);
                 }
 
                 // If the sweeping candle is part of the FVG, mark it as a Gauntlet
                 if (isSweepingCandlePartOfFVG)
                 {
                     // Mark the FVG as a Gauntlet
-                    gauntletFVG.IsGauntlet = true;
+                    lastFvgInOrderflow.IsGauntlet = true;
 
                     // Associate it with the orderflow
-                    orderflow.GauntletFVG = gauntletFVG;
+                    orderflow.GauntletFVG = lastFvgInOrderflow;
 
                     // Add to our collection of Gauntlets if not already present
-                    if (!_gauntlets.Any(g => g.Index == gauntletFVG.Index &&
-                                             g.Direction == gauntletFVG.Direction))
+                    if (!_gauntlets.Any(g => g.Index == lastFvgInOrderflow.Index &&
+                                             g.Direction == lastFvgInOrderflow.Direction))
                     {
-                        _gauntlets.Add(gauntletFVG);
+                        _gauntlets.Add(lastFvgInOrderflow);
                     }
 
                     // Draw it if visualization is enabled
                     if (_showGauntlet)
                     {
-                        DrawGauntlet(gauntletFVG);
+                        DrawGauntlet(lastFvgInOrderflow);
                     }
 
-                    // Exit early - we found our Gauntlet
-                    return;
-                }
-            }
-
-            // If we couldn't find a matching FVG from the detector, 
-            // try to detect an FVG pattern directly
-            gauntletFVG = DetectFVGPatternInOrderflow(orderflow, sweepingCandleIndex);
-
-            if (gauntletFVG != null)
-            {
-                // Mark as Gauntlet
-                gauntletFVG.IsGauntlet = true;
-
-                // Associate with orderflow
-                orderflow.GauntletFVG = gauntletFVG;
-
-                // Add to Gauntlets collection
-                _gauntlets.Add(gauntletFVG);
-
-                // Draw if visualization is enabled
-                if (_showGauntlet)
-                {
-                    DrawGauntlet(gauntletFVG);
+                    return; // Exit early - we found our Gauntlet
                 }
             }
         }
@@ -1013,118 +989,6 @@ namespace Zuva.Services
 
             // Return the most recent FVG if any were found
             return matchingFvgs.FirstOrDefault();
-        }
-
-        /// <summary>
-        /// Detects an FVG pattern directly from the price action within the orderflow boundaries
-        /// </summary>
-        private Level DetectFVGPatternInOrderflow(Level orderflow, int sweepingCandleIndex)
-        {
-            // Define the index range within the orderflow
-            int startIndex = Math.Min(orderflow.IndexLow, orderflow.IndexHigh);
-            int endIndex = Math.Max(orderflow.IndexLow, orderflow.IndexHigh);
-
-            // Check if the sweeping candle is within the orderflow
-            if (sweepingCandleIndex < startIndex || sweepingCandleIndex > endIndex)
-                return null;
-
-            // Try to detect an FVG with the sweeping candle as either the second or third candle
-
-            // Case 1: Sweeping candle as the third candle
-            if (sweepingCandleIndex >= startIndex + 2 && sweepingCandleIndex <= endIndex)
-            {
-                // Get the three consecutive bars
-                var bar1 = Bars[sweepingCandleIndex - 2]; // First candle
-                var bar2 = Bars[sweepingCandleIndex - 1]; // Middle candle
-                var bar3 = Bars[sweepingCandleIndex]; // Sweeping candle (third candle)
-
-                // Check for valid FVG pattern
-                if (orderflow.Direction == Direction.Up && bar1.High < bar3.Low)
-                {
-                    // Bullish FVG
-                    return new Level(
-                        LevelType.FairValueGap,
-                        bar1.High,
-                        bar3.Low,
-                        bar1.OpenTime,
-                        bar3.OpenTime,
-                        bar2.OpenTime,
-                        Direction.Up,
-                        sweepingCandleIndex - 2,
-                        sweepingCandleIndex,
-                        sweepingCandleIndex - 2,
-                        sweepingCandleIndex - 1,
-                        Zone.Premium
-                    );
-                }
-                else if (orderflow.Direction == Direction.Down && bar1.Low > bar3.High)
-                {
-                    // Bearish FVG
-                    return new Level(
-                        LevelType.FairValueGap,
-                        bar3.High,
-                        bar1.Low,
-                        bar3.OpenTime,
-                        bar1.OpenTime,
-                        bar2.OpenTime,
-                        Direction.Down,
-                        sweepingCandleIndex - 2,
-                        sweepingCandleIndex - 2,
-                        sweepingCandleIndex,
-                        sweepingCandleIndex - 1,
-                        Zone.Discount
-                    );
-                }
-            }
-
-            // Case 2: Sweeping candle as the second candle
-            if (sweepingCandleIndex >= startIndex + 1 && sweepingCandleIndex < endIndex)
-            {
-                // Get the three consecutive bars
-                var bar1 = Bars[sweepingCandleIndex - 1]; // First candle
-                var bar2 = Bars[sweepingCandleIndex]; // Sweeping candle (second candle)
-                var bar3 = Bars[sweepingCandleIndex + 1]; // Third candle
-
-                // Check for valid FVG pattern
-                if (orderflow.Direction == Direction.Up && bar1.High < bar3.Low)
-                {
-                    // Bullish FVG
-                    return new Level(
-                        LevelType.FairValueGap,
-                        bar1.High,
-                        bar3.Low,
-                        bar1.OpenTime,
-                        bar3.OpenTime,
-                        bar2.OpenTime,
-                        Direction.Up,
-                        sweepingCandleIndex - 1,
-                        sweepingCandleIndex + 1,
-                        sweepingCandleIndex - 1,
-                        sweepingCandleIndex,
-                        Zone.Premium
-                    );
-                }
-                else if (orderflow.Direction == Direction.Down && bar1.Low > bar3.High)
-                {
-                    // Bearish FVG
-                    return new Level(
-                        LevelType.FairValueGap,
-                        bar3.High,
-                        bar1.Low,
-                        bar3.OpenTime,
-                        bar1.OpenTime,
-                        bar2.OpenTime,
-                        Direction.Down,
-                        sweepingCandleIndex - 1,
-                        sweepingCandleIndex - 1,
-                        sweepingCandleIndex + 1,
-                        sweepingCandleIndex,
-                        Zone.Discount
-                    );
-                }
-            }
-
-            return null;
         }
 
         /// <summary>
@@ -1792,7 +1656,7 @@ namespace Zuva.Services
                         fvg.Index == cisd.IndexOfConfirmingCandle ||
                         fvg.IndexMid == cisd.IndexOfConfirmingCandle ||
                         fvg.IndexHigh == cisd.IndexOfConfirmingCandle;
-                    
+
                     passesDirectionalRequirement = fvg.Low < cisd.High;
                 }
                 else // Direction.Down (Bearish FVG)
@@ -1802,13 +1666,13 @@ namespace Zuva.Services
                         fvg.Index == cisd.IndexOfConfirmingCandle ||
                         fvg.IndexMid == cisd.IndexOfConfirmingCandle ||
                         fvg.IndexLow == cisd.IndexOfConfirmingCandle;
-                    
+
                     passesDirectionalRequirement = fvg.High > cisd.Low;
                 }
 
                 // If the FVG involves the CISD confirming candle, check for intersection with breaker block
                 if (!fvgInvolvesCisdCandle || !passesDirectionalRequirement) continue;
-                
+
                 bool intersectsWithBreaker = CheckIntersection(fvg, cisd.BreakerBlock);
 
                 if (intersectsWithBreaker)

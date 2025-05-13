@@ -51,7 +51,7 @@ namespace Zuva.Services
                 new TimeRange(new TimeSpan(12, 50, 0), new TimeSpan(13, 10, 0)),
                 new TimeRange(new TimeSpan(13, 50, 0), new TimeSpan(14, 10, 0)),
                 new TimeRange(new TimeSpan(14, 50, 0), new TimeSpan(15, 10, 0)),
-                new TimeRange(new TimeSpan(15, 50, 0), new TimeSpan(16, 10, 0))
+                new TimeRange(new TimeSpan(15, 45, 0), new TimeSpan(16, 00, 0))
             };
 
             return macros;
@@ -174,7 +174,6 @@ namespace Zuva.Services
                             // Remove the lines
                             string startId = $"macro-start-{startTime.Ticks}";
                             string endId = $"macro-end-{endTime.Ticks}";
-                            
                             _chart.RemoveObject(startId);
                             _chart.RemoveObject(endId);
                         }
