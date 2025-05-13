@@ -1050,13 +1050,17 @@ namespace Zuva.Services
                         var breakerBlock = FindBreakerBlockForCisd(cisd);
                         if (breakerBlock != null)
                         {
-                            cisd.BreakerBlock = breakerBlock;
-                            _breakerBlocks.Add(breakerBlock);
-
-                            // Draw the breaker block if visualization is enabled
-                            if (_showBreakerBlock)
+                            // Only add the breaker if the low of the breaker is not higher than the CISD price
+                            if (breakerBlock.Low <= cisd.High) 
                             {
-                                DrawBreakerBlock(breakerBlock);
+                                cisd.BreakerBlock = breakerBlock;
+                                _breakerBlocks.Add(breakerBlock);
+
+                                // Draw the breaker block if visualization is enabled
+                                if (_showBreakerBlock)
+                                {
+                                    DrawBreakerBlock(breakerBlock);
+                                }
                             }
                         }
 
@@ -1094,13 +1098,17 @@ namespace Zuva.Services
                         var breakerBlock = FindBreakerBlockForCisd(cisd);
                         if (breakerBlock != null)
                         {
-                            cisd.BreakerBlock = breakerBlock;
-                            _breakerBlocks.Add(breakerBlock);
-
-                            // Draw the breaker block if visualization is enabled
-                            if (_showBreakerBlock)
+                            // Only add the breaker if the high of the breaker is not lower than the CISD price
+                            if (breakerBlock.High >= cisd.Low)
                             {
-                                DrawBreakerBlock(breakerBlock);
+                                cisd.BreakerBlock = breakerBlock;
+                                _breakerBlocks.Add(breakerBlock);
+
+                                // Draw the breaker block if visualization is enabled
+                                if (_showBreakerBlock)
+                                {
+                                    DrawBreakerBlock(breakerBlock);
+                                }
                             }
                         }
 
@@ -1211,7 +1219,6 @@ namespace Zuva.Services
         // Manage max CISD count
         private void ManageMaxCisdCount(Direction direction)
         {
-            return;
             // Get unconfirmed CISDs of the specified direction
             var unconfirmedCisds = _cisdLevels
                 .Where(cisd => cisd.Direction == direction && !cisd.IsConfirmed)
@@ -1231,7 +1238,6 @@ namespace Zuva.Services
 
         private Level FindBreakerBlockForCisd(Level cisd)
         {
-            _logger($"Looking for Breaker");
             if (cisd.Direction == Direction.Up) // Bullish CISD
             {
                 // Find the previous bullish orderflow
@@ -1316,7 +1322,6 @@ namespace Zuva.Services
 
         private List<int> FindLastConsecutiveCandlesInOrderflow(Level orderflow, Direction direction)
         {
-            _logger($"{orderflow == null}");
             // Define search range based on direction of the orderflow
             int startIndex = Math.Min(orderflow.IndexLow, orderflow.IndexHigh);
             int endIndex = Math.Max(orderflow.IndexLow, orderflow.IndexHigh);
@@ -1475,7 +1480,6 @@ namespace Zuva.Services
         /// </summary>
         public void Initialize(List<SwingPoint> swingPoints)
         {
-            _logger($"Initializing {swingPoints.Count} SwingPoints");
             if (swingPoints == null || swingPoints.Count < 3) // Need at least 3 points to form an orderflow
                 return;
 
