@@ -238,19 +238,6 @@ namespace Zuva
                 try
                 {
                     _pdArrayAnalyzer.DetectFVG(Bars, _previousBarIndex);
-                    
-                    var allFvgs = _pdArrayAnalyzer.GetAllFVGs();
-                    if (allFvgs != null && allFvgs.Count > 0)
-                    {
-                        // Get the most recent FVG
-                        var latestFvg = allFvgs.OrderByDescending(f => f.Index).FirstOrDefault();
-        
-                        // Check if it's a Unicorn
-                        if (latestFvg != null && latestFvg.Index == _previousBarIndex)
-                        {
-                            _pdArrayAnalyzer.CheckForUnicorns(latestFvg);
-                        }
-                    }
                 }
                 catch (Exception ex)
                 {
