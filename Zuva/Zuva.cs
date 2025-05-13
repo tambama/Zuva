@@ -44,6 +44,8 @@ namespace Zuva
         
         [Parameter("Show Order Blocks", Group = "PD Arrays", DefaultValue = true)]
         public bool ShowOrderBlock { get; set; }
+        [Parameter("Show Breaker Blocks", Group = "PD Arrays", DefaultValue = false)]
+        public bool ShowBreakerBlock { get; set; }
         [Parameter("Show Gauntlets", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowGauntlet { get; set; }
         
@@ -162,6 +164,7 @@ namespace Zuva
                     ShowGauntlet,
                     _fvgDetector,
                     ShowCISD,
+                    ShowBreakerBlock,
                     MaxCisdsPerDirection,
                     message => Print(message));
             }
@@ -562,6 +565,21 @@ namespace Zuva
         public List<TimeRange> GetMacros()
         {
             return _timeManager?.GetMacros() ?? new List<TimeRange>();
+        }
+        
+        public List<Level> GetAllBreakerBlocks()
+        {
+            return _pdArrayAnalyzer?.GetAllBreakerBlocks() ?? new List<Level>();
+        }
+
+        public List<Level> GetBullishBreakerBlocks()
+        {
+            return _pdArrayAnalyzer?.GetBullishBreakerBlocks() ?? new List<Level>();
+        }
+
+        public List<Level> GetBearishBreakerBlocks()
+        {
+            return _pdArrayAnalyzer?.GetBearishBreakerBlocks() ?? new List<Level>();
         }
     }
 }

@@ -40,6 +40,10 @@ namespace Zuva.Services
         private readonly int _maxCisdsPerDirection;
         private readonly List<Level> _cisdLevels = new List<Level>();
 
+        // Breaker Blocks
+        private readonly List<Level> _breakerBlocks = new List<Level>();
+        private readonly bool _showBreakerBlock;
+
         // Collection to store all gauntlet levels
         private readonly List<Level> _gauntlets = new List<Level>();
 
@@ -60,6 +64,7 @@ namespace Zuva.Services
             bool showGauntlet = false,
             FvgDetector fvgDetector = null,
             bool showCISD = false,
+            bool showBreakerBlock = false,
             int maxCisdsPerDirection = 2,
             Action<string> logger = null)
         {
@@ -70,6 +75,7 @@ namespace Zuva.Services
             _showGauntlet = showGauntlet;
             _fvgDetector = fvgDetector;
             _showCISD = showCISD;
+            _showBreakerBlock = showBreakerBlock;
             _maxCisdsPerDirection = maxCisdsPerDirection;
             _logger = logger ?? (_ => { });
         }
@@ -945,7 +951,7 @@ namespace Zuva.Services
 
                 // Add to CISD collection
                 _cisdLevels.Add(cisdLevel);
-                
+
                 // Manage max CISDs before adding the new one
                 ManageMaxCisdCount(Direction.Down);
             }
@@ -1013,7 +1019,7 @@ namespace Zuva.Services
 
                 // Add to CISD collection
                 _cisdLevels.Add(cisdLevel);
-                
+
                 // Manage max CISDs before adding the new one
                 ManageMaxCisdCount(Direction.Up);
             }
@@ -1037,6 +1043,22 @@ namespace Zuva.Services
                         swingPoint.Bar.Close > cisd.High)
                     {
                         cisd.IsConfirmed = true;
+                        // Set the confirming candle index
+                        cisd.IndexOfConfirmingCandle = swingPoint.Index;
+
+                        // Find and assign the breaker block
+                        var breakerBlock = FindBreakerBlockForCisd(cisd);
+                        if (breakerBlock != null)
+                        {
+                            cisd.BreakerBlock = breakerBlock;
+                            _breakerBlocks.Add(breakerBlock);
+
+                            // Draw the breaker block if visualization is enabled
+                            if (_showBreakerBlock)
+                            {
+                                DrawBreakerBlock(breakerBlock);
+                            }
+                        }
 
                         // Draw a confirmation line
                         if (_chart != null && _showCISD)
@@ -1065,6 +1087,22 @@ namespace Zuva.Services
                         swingPoint.Bar.Close < cisd.Low)
                     {
                         cisd.IsConfirmed = true;
+                        // Set the confirming candle index
+                        cisd.IndexOfConfirmingCandle = swingPoint.Index;
+
+                        // Find and assign the breaker block
+                        var breakerBlock = FindBreakerBlockForCisd(cisd);
+                        if (breakerBlock != null)
+                        {
+                            cisd.BreakerBlock = breakerBlock;
+                            _breakerBlocks.Add(breakerBlock);
+
+                            // Draw the breaker block if visualization is enabled
+                            if (_showBreakerBlock)
+                            {
+                                DrawBreakerBlock(breakerBlock);
+                            }
+                        }
 
                         // Draw a confirmation line
                         if (_chart != null && _showCISD)
@@ -1176,18 +1214,155 @@ namespace Zuva.Services
             // Get unconfirmed CISDs of the specified direction
             var unconfirmedCisds = _cisdLevels
                 .Where(cisd => cisd.Direction == direction && !cisd.Activated)
-                .OrderBy(cisd => cisd.Index)  // Order by index to get the oldest first
+                .OrderBy(cisd => cisd.Index) // Order by index to get the oldest first
                 .ToList();
 
             // If we already have the maximum number, remove the oldest ones
             while (unconfirmedCisds.Count > _maxCisdsPerDirection && unconfirmedCisds.Count > 0)
             {
                 var oldestCisd = unconfirmedCisds.First();
-        
+
                 // Remove from collection
                 _cisdLevels.Remove(oldestCisd);
                 unconfirmedCisds.Remove(oldestCisd);
             }
+        }
+
+        private Level FindBreakerBlockForCisd(Level cisd)
+        {
+            if (cisd.Direction == Direction.Up) // Bullish CISD
+            {
+                // Find the previous bullish orderflow
+                var previousBullishOrderflow = _pdArrays
+                    .Where(p => p.Direction == Direction.Up && p.Index < cisd.Index)
+                    .OrderByDescending(p => p.Index)
+                    .FirstOrDefault();
+
+                if (previousBullishOrderflow == null)
+                    return null;
+
+                // Find the last set of consecutive bullish candles in this orderflow
+                var lastConsecutiveBullishCandles =
+                    FindLastConsecutiveCandlesInOrderflow(previousBullishOrderflow, Direction.Up);
+
+                if (lastConsecutiveBullishCandles.Count == 0)
+                    return null;
+
+                // Get indices of the first and last bullish candles
+                int firstBullishCandleIndex = lastConsecutiveBullishCandles.First();
+                int lastBullishCandleIndex = lastConsecutiveBullishCandles.Last();
+
+                // Get the actual candles
+                Bar firstBullishCandle = Bars[firstBullishCandleIndex];
+                Bar lastBullishCandle = Bars[lastBullishCandleIndex];
+
+                // Create a bullish breaker block
+                return new Level(
+                    LevelType.BreakerBlock,
+                    firstBullishCandle.Low, // Low of first bullish candle
+                    lastBullishCandle.High, // High of last bullish candle
+                    firstBullishCandle.OpenTime, // Time of first bullish candle
+                    lastBullishCandle.OpenTime, // Time of last bullish candle
+                    null, // No mid time
+                    Direction.Up, // Bullish direction
+                    firstBullishCandleIndex, // Index of first bullish candle
+                    lastBullishCandleIndex, // Index of last bullish candle
+                    firstBullishCandleIndex // Index of low (same as first candle)
+                );
+            }
+            else // Direction.Down (Bearish CISD)
+            {
+                // Find the previous bearish orderflow
+                var previousBearishOrderflow = _pdArrays
+                    .Where(p => p.Direction == Direction.Down && p.Index < cisd.Index)
+                    .OrderByDescending(p => p.Index)
+                    .FirstOrDefault();
+
+                if (previousBearishOrderflow == null)
+                    return null;
+
+                // Find the last set of consecutive bearish candles in this orderflow
+                var lastConsecutiveBearishCandles =
+                    FindLastConsecutiveCandlesInOrderflow(previousBearishOrderflow, Direction.Down);
+
+                if (lastConsecutiveBearishCandles.Count == 0)
+                    return null;
+
+                // Get indices of the first and last bearish candles
+                int firstBearishCandleIndex = lastConsecutiveBearishCandles.First();
+                int lastBearishCandleIndex = lastConsecutiveBearishCandles.Last();
+
+                // Get the actual candles
+                Bar firstBearishCandle = Bars[firstBearishCandleIndex];
+                Bar lastBearishCandle = Bars[lastBearishCandleIndex];
+
+                // Create a bearish breaker block
+                return new Level(
+                    LevelType.BreakerBlock,
+                    lastBearishCandle.Low, // Low of last bearish candle
+                    firstBearishCandle.High, // High of first bearish candle
+                    lastBearishCandle.OpenTime, // Time of last bearish candle
+                    firstBearishCandle.OpenTime, // Time of first bearish candle
+                    null, // No mid time
+                    Direction.Down, // Bearish direction
+                    firstBearishCandleIndex, // Index of first bearish candle
+                    firstBearishCandleIndex, // Index of high (same as first candle)
+                    lastBearishCandleIndex // Index of low (same as last candle)
+                );
+            }
+        }
+
+        private List<int> FindLastConsecutiveCandlesInOrderflow(Level orderflow, Direction direction)
+        {
+            // Define search range based on direction of the orderflow
+            int startIndex = Math.Min(orderflow.IndexLow, orderflow.IndexHigh);
+            int endIndex = Math.Max(orderflow.IndexLow, orderflow.IndexHigh);
+
+            // Ensure we have valid indices
+            if (startIndex < 0 || endIndex < 0 || startIndex >= Bars.Count || endIndex >= Bars.Count)
+                return new List<int>();
+
+            // Scan the orderflow from the end to find the last set of consecutive candles
+            // We'll scan backward from the end of the orderflow to find the first break
+            List<int> lastConsecutiveCandles = new List<int>();
+
+            // Start from the end and work backward
+            for (int i = endIndex; i >= startIndex; i--)
+            {
+                var bar = Bars[i];
+                var barDirection = bar.GetCandleDirection();
+
+                if (barDirection == direction)
+                {
+                    // Add to our consecutive candles collection
+                    lastConsecutiveCandles.Insert(0, i); // Insert at beginning to maintain correct order
+                }
+                else
+                {
+                    // Once we hit a candle of the opposite direction, we've found the last set
+                    break;
+                }
+            }
+
+            return lastConsecutiveCandles;
+        }
+
+        private void DrawBreakerBlock(Level breakerBlock)
+        {
+            if (_chart == null)
+                return;
+
+            // Create a unique ID for this breaker block
+            string id =
+                $"breaker-{breakerBlock.Direction}-{breakerBlock.Index}-{breakerBlock.IndexHigh}-{breakerBlock.IndexLow}";
+
+            // Draw rectangle with appropriate styling
+            _chart.DrawRectangle(
+                breakerBlock,
+                id,
+                true, // Draw midpoint
+                20 // Higher opacity for better visibility
+            );
         }
 
         // Add method to get all CISD levels
@@ -1274,6 +1449,22 @@ namespace Zuva.Services
         public List<Level> GetGauntlets(Direction direction)
         {
             return _gauntlets.Where(g => g.Direction == direction).ToList();
+        }
+
+        // Add to PdArrayAnalyzer class
+        public List<Level> GetAllBreakerBlocks()
+        {
+            return _breakerBlocks;
+        }
+
+        public List<Level> GetBullishBreakerBlocks()
+        {
+            return _breakerBlocks.Where(b => b.Direction == Direction.Up).ToList();
+        }
+
+        public List<Level> GetBearishBreakerBlocks()
+        {
+            return _breakerBlocks.Where(b => b.Direction == Direction.Down).ToList();
         }
 
         /// <summary>

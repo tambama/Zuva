@@ -43,6 +43,8 @@ public class Level
     public bool IsConfirmed { get; set; }
     public DateTime? StretchTo { get; set; }
     public double? Entry { get; set; }
+    public int IndexOfConfirmingCandle { get; set; }
+    public Level BreakerBlock { get; set; }
     
     
     // Properties for liquidity sweep tracking
