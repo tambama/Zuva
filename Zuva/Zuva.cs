@@ -19,6 +19,9 @@ namespace Zuva
 
         [Parameter("HTF", DefaultValue = "H1")]
         public string HTF { get; set; }
+        
+        [Parameter("Show Macro Times", Group = "Time Management", DefaultValue = true)]
+        public bool ShowMacros { get; set; }
 
         [Parameter("Show Market Structure", Group = "Market Structure", DefaultValue = true)]
         public bool ShowMarketStructure { get; set; }
@@ -94,6 +97,9 @@ namespace Zuva
 
         // FVG detector
         private FvgDetector _fvgDetector;
+        
+        // Time Manager
+        private TimeManager _timeManager;
 
         // Flag to track if we have enough data for market structure analysis
         private bool _marketStructureInitialized = false;
@@ -115,6 +121,17 @@ namespace Zuva
             _htfSwingDetector.SwingPointRemoved += OnSwingPointRemoved;
 
             _highTimeFrame = HTF.GetTimeFrameFromString();
+            
+            try
+            {
+                _timeManager = new TimeManager(Chart, ShowMacros);
+            }
+            catch (Exception ex)
+            {
+                Print("Error initializing Time Manager: " + ex.Message);
+                // Disable to prevent further errors
+                ShowMacros = false;
+            }
 
             // Initialize FVG detector with order block support
             try
@@ -185,6 +202,19 @@ namespace Zuva
             _currentBarIndex = index;
             _previousBar = Bars[index - 1];
             _previousBarIndex = index - 1;
+            
+            // Process for macro time periods
+            if (_timeManager != null)
+            {
+                try
+                {
+                    _timeManager.ProcessBar(_currentBar.OpenTime);
+                }
+                catch (Exception ex)
+                {
+                    Print("Error in macro time processing: " + ex.Message);
+                }
+            }
             
             // Process for FVG and Order Block detection
             if (_fvgDetector != null)
@@ -503,6 +533,16 @@ namespace Zuva
         public List<Level> GetConfirmedCISDLevels()
         {
             return _pdArrayAnalyzer?.GetConfirmedCISDLevels() ?? new List<Level>();
+        }
+        
+        public bool IsInMacroTime(DateTime time)
+        {
+            return _timeManager?.IsInMacroTime(time) ?? false;
+        }
+
+        public List<TimeRange> GetMacros()
+        {
+            return _timeManager?.GetMacros() ?? new List<TimeRange>();
         }
     }
 }
