@@ -96,7 +96,7 @@ namespace Zuva.Services
                 ProcessNewSwingHigh(swingPoint);
             }
 
-            CheckCisdActivity(swingPoint, swingPoint.Index);
+            CheckCisdConfirmation(swingPoint, swingPoint.Index);
         }
 
         /// <summary>
@@ -878,120 +878,140 @@ namespace Zuva.Services
             if (startIndex < 0 || endIndex < 0 || startIndex >= Bars.Count || endIndex >= Bars.Count)
                 return;
 
-            if (orderflow.Direction == Direction.Up)
+            if (orderflow.Direction == Direction.Up) // Bullish orderflow creates bearish CISD
             {
-                // For bullish orderflow, find a sequence of consecutive bullish candles
-                // But this creates a BEARISH CISD (opposite direction)
-                int firstBullishIndex = -1;
-                int lastBullishIndex = -1;
+                // Find all sets of consecutive bullish candles within the orderflow
+                List<List<int>> bullishSets = new();
+                List<int> currentSet = new();
 
-                // Start from the beginning of the orderflow
+                // Scan through the bullish orderflow
                 for (int i = startIndex; i <= endIndex; i++)
                 {
-                    Bar currentBar = Bars[i];
-                    bool isBullish = currentBar.Close > currentBar.Open;
+                    var bar = Bars[i];
+                    var direction = bar.GetCandleDirection();
 
-                    if (isBullish)
+                    if (direction == Direction.Up)
                     {
-                        if (firstBullishIndex == -1)
-                        {
-                            // Found first bullish candle
-                            firstBullishIndex = i;
-                        }
-
-                        // Update the last bullish candle index
-                        lastBullishIndex = i;
+                        // Add this bullish candle to the current set
+                        currentSet.Add(i);
                     }
-                    else if (firstBullishIndex != -1)
+                    else if (currentSet.Count > 0)
                     {
-                        // Break the sequence on bearish candle
-                        break;
+                        // We hit a bearish candle, store the current set and reset
+                        bullishSets.Add(new List<int>(currentSet));
+                        currentSet.Clear();
                     }
                 }
 
-                // If we found at least one bullish candle, create a CISD level
-                if (firstBullishIndex >= 0 && lastBullishIndex >= 0)
+                // Don't forget to add the last set if it exists
+                if (currentSet.Count > 0)
                 {
-                    // Create a BEARISH CISD level
-                    var cisdLevel = new Level(
-                        LevelType.CISD,
-                        Bars[firstBullishIndex].Open, // Low is the opening price of first bullish candle
-                        Bars[lastBullishIndex].Close, // High is the closing price of last bullish candle
-                        Bars[firstBullishIndex].OpenTime,
-                        Bars[lastBullishIndex].OpenTime,
-                        null,
-                        Direction.Down, // BEARISH direction for bullish sequence
-                        firstBullishIndex,
-                        lastBullishIndex,
-                        firstBullishIndex
-                    );
-
-                    // Associate with orderflow
-                    orderflow.CISDLevel = cisdLevel;
-
-                    // Add to CISD collection
-                    _cisdLevels.Add(cisdLevel);
+                    bullishSets.Add(new List<int>(currentSet));
                 }
+
+                // If we have no sets, we can't create a CISD
+                if (bullishSets.Count == 0)
+                    return;
+
+                // Use the last set of consecutive bullish candles
+                var lastBullishSet = bullishSets[bullishSets.Count - 1];
+
+                if (lastBullishSet.Count == 0)
+                    return;
+
+                // Get the first and last index of the last set
+                int firstBullishIndex = lastBullishSet.Min();
+                int lastBullishIndex = lastBullishSet.Max();
+
+                // Create a BEARISH CISD level
+                var cisdLevel = new Level(
+                    LevelType.CISD,
+                    Bars[firstBullishIndex].Open, // Low is the opening price of first bullish candle
+                    Bars[lastBullishIndex].Close, // High is the closing price of last bullish candle
+                    Bars[firstBullishIndex].OpenTime,
+                    Bars[lastBullishIndex].OpenTime,
+                    null,
+                    Direction.Down, // BEARISH direction for bullish sequence
+                    firstBullishIndex,
+                    lastBullishIndex,
+                    firstBullishIndex
+                );
+
+                // Associate with orderflow
+                orderflow.CISDLevel = cisdLevel;
+
+                // Add to CISD collection
+                _cisdLevels.Add(cisdLevel);
             }
-            else // Direction.Down (bearish orderflow)
+            else // Direction.Down (bearish orderflow creates bullish CISD)
             {
-                // For bearish orderflow, find a sequence of consecutive bearish candles
-                // But this creates a BULLISH CISD (opposite direction)
-                int firstBearishIndex = -1;
-                int lastBearishIndex = -1;
+                // Find all sets of consecutive bearish candles within the orderflow
+                List<List<int>> bearishSets = new();
+                List<int> currentSet = new();
 
-                // Start from the beginning of the orderflow
+                // Scan through the bearish orderflow
                 for (int i = startIndex; i <= endIndex; i++)
                 {
-                    Bar currentBar = Bars[i];
-                    bool isBearish = currentBar.Close < currentBar.Open;
+                    var bar = Bars[i];
+                    var direction = bar.GetCandleDirection();
 
-                    if (isBearish)
+                    if (direction == Direction.Down)
                     {
-                        if (firstBearishIndex == -1)
-                        {
-                            // Found first bearish candle
-                            firstBearishIndex = i;
-                        }
-
-                        // Update the last bearish candle index
-                        lastBearishIndex = i;
+                        // Add this bearish candle to the current set
+                        currentSet.Add(i);
                     }
-                    else if (firstBearishIndex != -1)
+                    else if (currentSet.Count > 0)
                     {
-                        // Break the sequence on bullish candle
-                        break;
+                        // We hit a bullish candle, store the current set and reset
+                        bearishSets.Add(new List<int>(currentSet));
+                        currentSet.Clear();
                     }
                 }
 
-                // If we found at least one bearish candle, create a CISD level
-                if (firstBearishIndex >= 0 && lastBearishIndex >= 0)
+                // Don't forget to add the last set if it exists
+                if (currentSet.Count > 0)
                 {
-                    // Create a BULLISH CISD level
-                    var cisdLevel = new Level(
-                        LevelType.CISD,
-                        Bars[lastBearishIndex].Close, // Low is the closing price of last bearish candle
-                        Bars[firstBearishIndex].Open, // High is the opening price of first bearish candle
-                        Bars[lastBearishIndex].OpenTime,
-                        Bars[firstBearishIndex].OpenTime,
-                        null,
-                        Direction.Up, // BULLISH direction for bearish sequence
-                        firstBearishIndex,
-                        firstBearishIndex,
-                        lastBearishIndex
-                    );
-
-                    // Associate with orderflow
-                    orderflow.CISDLevel = cisdLevel;
-
-                    // Add to CISD collection
-                    _cisdLevels.Add(cisdLevel);
+                    bearishSets.Add(new List<int>(currentSet));
                 }
+
+                // If we have no sets, we can't create a CISD
+                if (bearishSets.Count == 0)
+                    return;
+
+                // Use the last set of consecutive bearish candles
+                var lastBearishSet = bearishSets[bearishSets.Count - 1];
+
+                if (lastBearishSet.Count == 0)
+                    return;
+
+                // Get the first and last index of the last set
+                int firstBearishIndex = lastBearishSet.Min();
+                int lastBearishIndex = lastBearishSet.Max();
+
+                // Create a BULLISH CISD level
+                var cisdLevel = new Level(
+                    LevelType.CISD,
+                    Bars[lastBearishIndex].Close, // Low is the closing price of last bearish candle
+                    Bars[firstBearishIndex].Open, // High is the opening price of first bearish candle
+                    Bars[lastBearishIndex].OpenTime,
+                    Bars[firstBearishIndex].OpenTime,
+                    null,
+                    Direction.Up, // BULLISH direction for bearish sequence
+                    firstBearishIndex,
+                    firstBearishIndex,
+                    lastBearishIndex
+                );
+
+                // Associate with orderflow
+                orderflow.CISDLevel = cisdLevel;
+
+                // Add to CISD collection
+                _cisdLevels.Add(cisdLevel);
             }
         }
 
         // Check for CISD confirmation and activation
-        private void CheckCisdActivity(SwingPoint swingPoint, int currentIndex)
+        private void CheckCisdConfirmation(SwingPoint swingPoint, int currentIndex)
         {
             // Get all CISD levels that are not yet confirmed
             var pendingCisdLevels = _cisdLevels
@@ -1004,7 +1024,8 @@ namespace Zuva.Services
                 if (cisd.Direction == Direction.Up) // Bullish CISD
                 {
                     // Bullish CISD is confirmed when a bullish candle closes above the CISD high
-                    if (swingPoint.CandleDirection == Direction.Up && swingPoint.Bar.Open < cisd.High && swingPoint.Bar.Close > cisd.High)
+                    if (swingPoint.CandleDirection == Direction.Up && swingPoint.Bar.Open < cisd.High &&
+                        swingPoint.Bar.Close > cisd.High)
                     {
                         cisd.IsConfirmed = true;
 
@@ -1031,7 +1052,8 @@ namespace Zuva.Services
                 else // Direction.Down (Bearish CISD)
                 {
                     // Bearish CISD is confirmed when a bearish candle closes below the CISD low
-                    if (swingPoint.CandleDirection == Direction.Down && swingPoint.Bar.Open > cisd.Low && swingPoint.Bar.Close < cisd.Low)
+                    if (swingPoint.CandleDirection == Direction.Down && swingPoint.Bar.Open > cisd.Low &&
+                        swingPoint.Bar.Close < cisd.Low)
                     {
                         cisd.IsConfirmed = true;
 
@@ -1056,49 +1078,90 @@ namespace Zuva.Services
                     }
                 }
             }
+        }
+
+        // Method to check for CISD activation on previous bar
+        public void CheckCisdActivationOnBar(Bar previousBar, int barIndex)
+        {
+            if (previousBar == null)
+                return;
 
             // Get all CISD levels that are confirmed but not activated
             var confirmedCisdLevels = _cisdLevels
                 .Where(cisd => cisd.IsConfirmed && !cisd.Activated)
                 .ToList();
 
-            // Check for CISD activation
+            // Check for CISD activation on this bar
             foreach (var cisd in confirmedCisdLevels)
             {
-                if (cisd.Direction == Direction.Up)
+                if (cisd.Direction == Direction.Up) // Bullish CISD
                 {
-                    // Bullish CISD is activated when a bearish swing point's price moves below the CISD level (high)
-                    if (swingPoint.Direction == Direction.Down && swingPoint.Bar.Open > cisd.High && swingPoint.Price < cisd.High)
+                    // Bullish CISD is activated when price moves below the CISD level (high)
+                    if (previousBar.Open > cisd.High && previousBar.Low < cisd.High)
                     {
                         cisd.Activated = true;
 
                         // Draw a CISD activation line
-                        DrawCISDLine(cisd, swingPoint);
+                        if (_chart != null && _showCISD)
+                        {
+                            string id = $"cisd-{cisd.Direction}-{cisd.Index}-{barIndex}";
+                            double priceLevel = cisd.High;
+                            DateTime startTime = cisd.HighTime;
+                            Color cisdColor = Color.Green;
 
-                        // Update swing point
-                        swingPoint.ActivatedCISD = true;
-                        swingPoint.ActivatedCISDLevel = cisd;
+                            _chart.DrawStraightLine(
+                                id,
+                                startTime,
+                                priceLevel,
+                                previousBar.OpenTime,
+                                priceLevel,
+                                null, // No label
+                                LineStyle.Dots,
+                                cisdColor,
+                                false, // No label displayed
+                                true, // Remove existing
+                                false, // Not extended
+                                true
+                            );
+                        }
                     }
                 }
-                else // Direction.Down
+                else // Direction.Down (Bearish CISD)
                 {
-                    // Bearish CISD is activated when a bullish swing point's price moves above the CISD level (low)
-                    if (swingPoint.Direction == Direction.Up && swingPoint.Bar.Open < cisd.Low && swingPoint.Price > cisd.Low)
+                    // Bearish CISD is activated when price moves above the CISD level (low)
+                    if (previousBar.Open < cisd.Low && previousBar.High > cisd.Low)
                     {
                         cisd.Activated = true;
 
                         // Draw a CISD activation line
-                        DrawCISDLine(cisd, swingPoint);
+                        if (_chart != null && _showCISD)
+                        {
+                            string id = $"cisd-{cisd.Direction}-{cisd.Index}-{barIndex}";
+                            double priceLevel = cisd.Low;
+                            DateTime startTime = cisd.LowTime;
+                            Color cisdColor = Color.Pink;
 
-                        // Update swing point
-                        swingPoint.ActivatedCISD = true;
-                        swingPoint.ActivatedCISDLevel = cisd;
+                            _chart.DrawStraightLine(
+                                id,
+                                startTime,
+                                priceLevel,
+                                previousBar.OpenTime,
+                                priceLevel,
+                                null, // No label
+                                LineStyle.Dots,
+                                cisdColor,
+                                false, // No label displayed
+                                true, // Remove existing
+                                false, // Not extended
+                                true
+                            );
+                        }
                     }
                 }
             }
         }
 
-// Replace the incorrect DrawCISDLine method with this corrected version
+        // Replace the incorrect DrawCISDLine method with this corrected version
         private void DrawCISDLine(Level cisdLevel, SwingPoint activatingPoint)
         {
             if (_chart == null)

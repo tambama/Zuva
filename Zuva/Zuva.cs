@@ -109,6 +109,9 @@ namespace Zuva
 
         protected override void Initialize()
         {
+            // Delete all obk=jects from Chart
+            Chart.RemoveAllObjects();
+            
             // Initialize the swing detector
             _swingPoints = new List<SwingPoint>();
             _htfSwingPoints = new List<SwingPoint>();
@@ -226,6 +229,19 @@ namespace Zuva
                 catch (Exception ex)
                 {
                     Print("Error in FVG/OrderBlock detection: " + ex.Message);
+                }
+            }
+            
+            // Check for CISD activation on previous bar
+            if (_pdArrayAnalyzer != null && index > 1)
+            {
+                try
+                {
+                    _pdArrayAnalyzer.CheckCisdActivationOnBar(_previousBar, _previousBarIndex);
+                }
+                catch (Exception ex)
+                {
+                    Print("Error in CISD activation check: " + ex.Message);
                 }
             }
 
