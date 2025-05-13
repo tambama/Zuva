@@ -48,6 +48,9 @@ namespace Zuva
         public bool ShowOrderBlock { get; set; }
         [Parameter("Show Breaker Blocks", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowBreakerBlock { get; set; }
+
+        [Parameter("Show Unicorn", Group = "PD Arrays", DefaultValue = true)]
+        public bool ShowUnicorn { get; set; }
         [Parameter("Show Gauntlets", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowGauntlet { get; set; }
         
@@ -167,6 +170,7 @@ namespace Zuva
                     _fvgDetector,
                     ShowCISD,
                     ShowBreakerBlock,
+                    ShowUnicorn,
                     MaxCisdsPerDirection,
                     message => Print(message));
             }
@@ -227,19 +231,6 @@ namespace Zuva
                 }
             }
             
-            // Process for FVG and Order Block detection
-            if (_fvgDetector != null)
-            {
-                try
-                {
-                    _fvgDetector.DetectFVG(Bars, _previousBarIndex);
-                }
-                catch (Exception ex)
-                {
-                    Print("Error in FVG/OrderBlock detection: " + ex.Message);
-                }
-            }
-            
             // Check for CISD activation on previous bar
             if (_pdArrayAnalyzer != null && index > 1)
             {
@@ -250,6 +241,32 @@ namespace Zuva
                 catch (Exception ex)
                 {
                     Print("Error in CISD activation check: " + ex.Message);
+                }
+            }
+            
+            // Process for FVG and Order Block detection
+            if (_fvgDetector != null)
+            {
+                try
+                {
+                    _fvgDetector.DetectFVG(Bars, _previousBarIndex);
+                    
+                    var allFvgs = _fvgDetector.GetAllFVGs();
+                    if (allFvgs != null && allFvgs.Count > 0)
+                    {
+                        // Get the most recent FVG
+                        var latestFvg = allFvgs.OrderByDescending(f => f.Index).FirstOrDefault();
+        
+                        // Check if it's a Unicorn
+                        if (latestFvg != null && latestFvg.Index == _previousBarIndex)
+                        {
+                            _pdArrayAnalyzer.CheckForUnicorns(latestFvg);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Print("Error in FVG/OrderBlock detection: " + ex.Message);
                 }
             }
 
@@ -582,6 +599,21 @@ namespace Zuva
         public List<Level> GetBearishBreakerBlocks()
         {
             return _pdArrayAnalyzer?.GetBearishBreakerBlocks() ?? new List<Level>();
+        }
+        
+        public List<Level> GetAllUnicorns()
+        {
+            return _pdArrayAnalyzer?.GetAllUnicorns() ?? new List<Level>();
+        }
+
+        public List<Level> GetUnicorns(Direction direction)
+        {
+            return _pdArrayAnalyzer?.GetUnicorns(direction) ?? new List<Level>();
+        }
+
+        public Level GetLastUnicorn(Direction direction)
+        {
+            return _pdArrayAnalyzer?.GetLastUnicorn(direction);
         }
     }
 }

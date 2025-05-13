@@ -44,6 +44,10 @@ namespace Zuva.Services
         private readonly List<Level> _breakerBlocks = new List<Level>();
         private readonly bool _showBreakerBlock;
 
+        // Unicorns
+        private readonly List<Level> _unicorns = new List<Level>();
+        private readonly bool _showUnicorn;
+
         // Collection to store all gauntlet levels
         private readonly List<Level> _gauntlets = new List<Level>();
 
@@ -65,6 +69,7 @@ namespace Zuva.Services
             FvgDetector fvgDetector = null,
             bool showCISD = false,
             bool showBreakerBlock = false,
+            bool showUnicorn = false,
             int maxCisdsPerDirection = 2,
             Action<string> logger = null)
         {
@@ -76,6 +81,7 @@ namespace Zuva.Services
             _fvgDetector = fvgDetector;
             _showCISD = showCISD;
             _showBreakerBlock = showBreakerBlock;
+            _showUnicorn = showUnicorn;
             _maxCisdsPerDirection = maxCisdsPerDirection;
             _logger = logger ?? (_ => { });
         }
@@ -1032,7 +1038,7 @@ namespace Zuva.Services
             var pendingCisdLevels = _cisdLevels
                 .Where(cisd => !cisd.IsConfirmed)
                 .ToList();
-            
+
             // Check for CISD confirmation
             foreach (var cisd in pendingCisdLevels)
             {
@@ -1051,7 +1057,7 @@ namespace Zuva.Services
                         if (breakerBlock != null)
                         {
                             // Only add the breaker if the low of the breaker is not higher than the CISD price
-                            if (breakerBlock.Low <= cisd.High) 
+                            if (breakerBlock.Low <= cisd.High)
                             {
                                 cisd.BreakerBlock = breakerBlock;
                                 _breakerBlocks.Add(breakerBlock);
@@ -1350,7 +1356,7 @@ namespace Zuva.Services
                     // If we haven't found any matching candles yet, continue searching
                     if (!foundFirstMatchingCandle)
                         continue;
-            
+
                     // Once we hit a candle of the opposite direction AFTER finding matching candles, we break
                     break;
                 }
@@ -1375,6 +1381,150 @@ namespace Zuva.Services
                 true, // Draw midpoint
                 20 // Higher opacity for better visibility
             );
+        }
+
+        // Add a new method to check for Unicorns when a new FVG is detected
+        public void CheckForUnicorns(Level fvg)
+        {
+            // Skip if FVG detector isn't available or we don't have confirmed CISDs yet
+            if (_fvgDetector == null || fvg == null)
+                return;
+
+            // Get all confirmed CISDs that have breaker blocks
+            var confirmedCisdsWithBreakers = _cisdLevels
+                .Where(cisd => cisd.IsConfirmed && cisd.BreakerBlock != null)
+                .ToList();
+
+            foreach (var cisd in confirmedCisdsWithBreakers)
+            {
+                // Check if one of the FVG candles is the CISD confirming candle
+                bool fvgInvolvesCisdCandle = false;
+
+                if (fvg.Direction == Direction.Up) // Bullish FVG
+                {
+                    // For bullish FVG, check if any of its candles match the CISD confirming candle
+                    fvgInvolvesCisdCandle =
+                        fvg.Index == cisd.IndexOfConfirmingCandle ||
+                        fvg.IndexMid == cisd.IndexOfConfirmingCandle ||
+                        fvg.IndexHigh == cisd.IndexOfConfirmingCandle;
+                }
+                else // Direction.Down (Bearish FVG)
+                {
+                    // For bearish FVG, check if any of its candles match the CISD confirming candle
+                    fvgInvolvesCisdCandle =
+                        fvg.Index == cisd.IndexOfConfirmingCandle ||
+                        fvg.IndexMid == cisd.IndexOfConfirmingCandle ||
+                        fvg.IndexLow == cisd.IndexOfConfirmingCandle;
+                }
+
+                // If the FVG involves the CISD confirming candle, check for intersection with breaker block
+                if (fvgInvolvesCisdCandle)
+                {
+                    bool intersectsWithBreaker = CheckIntersection(fvg, cisd.BreakerBlock);
+
+                    if (intersectsWithBreaker)
+                    {
+                        // This FVG is a Unicorn - mark it
+                        fvg.LevelType = LevelType.Unicorn;
+
+                        // Add to unicorns collection
+                        _unicorns.Add(fvg);
+
+                        // Draw the unicorn if visualization is enabled
+                        if (_showUnicorn)
+                        {
+                            DrawUnicorn(fvg);
+                        }
+
+                        // Only need to find one match
+                        break;
+                    }
+                }
+            }
+        }
+
+// Helper method to check if two levels intersect
+        private bool CheckIntersection(Level level1, Level level2)
+        {
+            // Check for price range intersection
+            bool priceIntersects = !(level1.High < level2.Low || level1.Low > level2.High);
+
+            // Check for time range intersection
+            DateTime level1Start = level1.Direction == Direction.Up ? level1.LowTime : level1.HighTime;
+            DateTime level1End = level1.Direction == Direction.Up ? level1.HighTime : level1.LowTime;
+
+            DateTime level2Start = level2.Direction == Direction.Up ? level2.LowTime : level2.HighTime;
+            DateTime level2End = level2.Direction == Direction.Up ? level2.HighTime : level2.LowTime;
+
+            bool timeIntersects = !(level1End < level2Start || level1Start > level2End);
+
+            // Both price and time must intersect
+            return priceIntersects && timeIntersects;
+        }
+
+// Method to draw a Unicorn visualization
+        private void DrawUnicorn(Level unicorn)
+        {
+            if (_chart == null)
+                return;
+
+            // Create a unique ID for this Unicorn
+            string id = $"unicorn-{unicorn.Direction}-{unicorn.Index}-{unicorn.IndexHigh}-{unicorn.IndexLow}";
+
+            // Draw with a distinctive style - red solid line as specified in LineType.Unicorn style
+            Color unicornColor = Color.Red;
+
+            // Draw a distinctive pattern - rectangle with higher opacity
+            var rectangle = _chart.DrawRectangle(
+                id,
+                unicorn.LowTime,
+                unicorn.Low,
+                unicorn.HighTime,
+                unicorn.High,
+                unicornColor);
+
+            rectangle.IsFilled = true;
+            rectangle.Color = Color.FromArgb(30, unicornColor); // Higher opacity for Unicorns
+
+            // Draw solid midline to make it stand out
+            string midLineId = $"{id}-midline";
+            _chart.DrawTrendLine(
+                midLineId,
+                unicorn.LowTime,
+                unicorn.Mid,
+                unicorn.HighTime,
+                unicorn.Mid,
+                unicornColor,
+                2, // Thicker line
+                LineStyle.Solid); // Solid line for Unicorns
+
+            // Add a small label to identify it as a Unicorn
+            string labelId = $"{id}-label";
+            _chart.DrawText(
+                labelId,
+                "UNI",
+                unicorn.LowTime,
+                unicorn.Mid,
+                unicornColor);
+        }
+
+// Getter methods for Unicorns
+        public List<Level> GetAllUnicorns()
+        {
+            return _unicorns;
+        }
+
+        public List<Level> GetUnicorns(Direction direction)
+        {
+            return _unicorns.Where(u => u.Direction == direction).ToList();
+        }
+
+        public Level GetLastUnicorn(Direction direction)
+        {
+            return _unicorns
+                .Where(u => u.Direction == direction)
+                .OrderByDescending(u => u.Index)
+                .FirstOrDefault();
         }
 
         // Add method to get all CISD levels
