@@ -1,8 +1,6 @@
 using cAlgo.API;
 using Mwenje.Extensions;
 using Zuva.Models;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace Zuva.Services
 {
@@ -218,6 +216,9 @@ namespace Zuva.Services
             // Skip if we haven't been properly initialized
             if (!_isInitialized || swingPoint == null || _highBOS == null || _lowBOS == null)
                 return;
+
+            // Check if this swing point has swept any other swing points
+            CheckForSweptSwingPoints(swingPoint);
 
             // Update ordered lists
             if (swingPoint.SwingType == SwingType.H)
@@ -749,6 +750,44 @@ namespace Zuva.Services
             }
         }
 
+        // Add this new method to check for swept swing points
+        private void CheckForSweptSwingPoints(SwingPoint swingPoint)
+        {
+            // Get all swing points that might have been swept
+            var potentiallySweptPoints = _swingPoints
+                .Where(sp => sp.Index < swingPoint.Index) // Only earlier swing points
+                .ToList();
+
+            foreach (var point in potentiallySweptPoints)
+            {
+                // Check if this swing point swept a high
+                if (point.Direction == Direction.Up &&
+                    !point.Swept && // Not already swept
+                    swingPoint.Bar.High >= point.Price &&
+                    swingPoint.Bar.Low <= point.Price)
+                {
+                    // This high swing point was swept
+                    point.Swept = true;
+
+                    // Remove any standard deviations associated with this swing point
+                    RemoveStandardDeviationsBySwingPointIndex(point.Index);
+                }
+
+                // Check if this swing point swept a low
+                else if (point.Direction == Direction.Down &&
+                         !point.Swept && // Not already swept
+                         swingPoint.Bar.Low <= point.Price &&
+                         swingPoint.Bar.High >= point.Price)
+                {
+                    // This low swing point was swept
+                    point.Swept = true;
+
+                    // Remove any standard deviations associated with this swing point
+                    RemoveStandardDeviationsBySwingPointIndex(point.Index);
+                }
+            }
+        }
+
         /// <summary>
         /// Creates a standard deviation calculation after a market structure change
         /// </summary>
@@ -778,6 +817,25 @@ namespace Zuva.Services
             if (_standardDeviations == null || _standardDeviations.Count == 0)
                 return;
 
+            // Create a list to track which standard deviations to remove
+            List<StandardDeviation> deviationsToRemove = new List<StandardDeviation>();
+
+            // First handle removing standard deviations for swept swing points
+            var sweptSwingPointIndices = _swingPoints
+                .Where(sp => sp.Swept && sp.SweptLiquidity) // Find swept points
+                .Select(sp => sp.Index) // Get their indices
+                .ToList();
+
+            foreach (var index in sweptSwingPointIndices)
+            {
+                // Find any standard deviations associated with this swept swing point
+                var associatedDeviations = _standardDeviations
+                    .Where(sd => sd.Index == index)
+                    .ToList();
+
+                deviationsToRemove.AddRange(associatedDeviations);
+            }
+
             foreach (var stdDev in _standardDeviations.ToList())
             {
                 // Skip if the standard deviation is from a higher index (created after this swing point)
@@ -788,7 +846,7 @@ namespace Zuva.Services
                 if (stdDev.Direction == Direction.Down)
                 {
                     // Check for MinusTwo level sweep
-                    if (stdDev.MinusTwo > 0 && swingPoint.Bar.Open > stdDev.MinusTwo &&
+                    if (!stdDev.IsMinusTwoSwept && stdDev.MinusTwo > 0 && swingPoint.Bar.Open > stdDev.MinusTwo &&
                         swingPoint.Bar.Low < stdDev.MinusTwo)
                     {
                         // SD level has been swept
@@ -798,13 +856,20 @@ namespace Zuva.Services
 
                         // Extend the line to the swing point
                         ExtendStandardDeviationLine(stdDev, swingPoint, true);
-                        
+
                         // Mark level as swept
                         stdDev.MarkLevelAsSwept(true);
+
+                        // Check if both levels are now swept
+                        if (stdDev.AllSwept)
+                        {
+                            deviationsToRemove.Add(stdDev);
+                        }
                     }
 
                     // Check for MinusFour level sweep
-                    else if (stdDev.MinusFour > 0 && swingPoint.Bar.Open > stdDev.MinusFour &&
+                    else if (!stdDev.IsMinusFourSwept && stdDev.MinusFour > 0 &&
+                             swingPoint.Bar.Open > stdDev.MinusFour &&
                              swingPoint.Bar.Low < stdDev.MinusFour)
                     {
                         // SD level has been swept
@@ -814,16 +879,22 @@ namespace Zuva.Services
 
                         // Extend the line to the swing point
                         ExtendStandardDeviationLine(stdDev, swingPoint, false);
-                        
+
                         // Mark level as swept
                         stdDev.MarkLevelAsSwept(false);
+
+                        // Check if both levels are now swept
+                        if (stdDev.AllSwept)
+                        {
+                            deviationsToRemove.Add(stdDev);
+                        }
                     }
                 }
                 // For bullish SDs (Direction.Up), check if the candle opened below and went above
                 else
                 {
                     // Check for MinusTwo level sweep
-                    if (stdDev.MinusTwo > 0 && swingPoint.Bar.Open < stdDev.MinusTwo &&
+                    if (!stdDev.IsMinusTwoSwept && stdDev.MinusTwo > 0 && swingPoint.Bar.Open < stdDev.MinusTwo &&
                         swingPoint.Bar.High > stdDev.MinusTwo)
                     {
                         // SD level has been swept
@@ -833,13 +904,20 @@ namespace Zuva.Services
 
                         // Extend the line to the swing point
                         ExtendStandardDeviationLine(stdDev, swingPoint, true);
-                        
+
                         // Mark level as swept
                         stdDev.MarkLevelAsSwept(true);
+
+                        // Check if both levels are now swept
+                        if (stdDev.AllSwept)
+                        {
+                            deviationsToRemove.Add(stdDev);
+                        }
                     }
 
                     // Check for MinusFour level sweep
-                    else if (stdDev.MinusFour > 0 && swingPoint.Bar.Open < stdDev.MinusFour &&
+                    else if (!stdDev.IsMinusFourSwept && stdDev.MinusFour > 0 &&
+                             swingPoint.Bar.Open < stdDev.MinusFour &&
                              swingPoint.Bar.High > stdDev.MinusFour)
                     {
                         // SD level has been swept
@@ -849,9 +927,48 @@ namespace Zuva.Services
 
                         // Extend the line to the swing point
                         ExtendStandardDeviationLine(stdDev, swingPoint, false);
-                        
+
                         // Mark level as swept
                         stdDev.MarkLevelAsSwept(false);
+
+                        // Check if both levels are now swept
+                        if (stdDev.AllSwept)
+                        {
+                            deviationsToRemove.Add(stdDev);
+                        }
+                    }
+                }
+            }
+
+            // Remove fully swept standard deviations from the collection
+            // This doesn't affect the extended lines already drawn on the chart
+            // At the end of the method, remove all standard deviations that need to be removed
+            foreach (var stdDev in deviationsToRemove)
+            {
+                _standardDeviations.Remove(stdDev);
+
+                // Keep track of which extended lines to preserve
+                string extendedTwoLineId = stdDev.ExtendedTwoLineId;
+                string extendedFourLineId = stdDev.ExtendedFourLineId;
+                bool isTwoSwept = stdDev.IsMinusTwoSwept;
+                bool isFourSwept = stdDev.IsMinusFourSwept;
+
+                // Remove chart lines for unswept levels
+                if (_chart != null && _showStdv)
+                {
+                    // Always remove original lines
+                    _chart.RemoveObject($"{stdDev.OneTime.Ticks}-two");
+                    _chart.RemoveObject($"{stdDev.OneTime.Ticks}-four");
+
+                    // Remove extended lines ONLY for unswept levels
+                    if (!isTwoSwept && !string.IsNullOrEmpty(extendedTwoLineId))
+                    {
+                        _chart.RemoveObject(extendedTwoLineId);
+                    }
+
+                    if (!isFourSwept && !string.IsNullOrEmpty(extendedFourLineId))
+                    {
+                        _chart.RemoveObject(extendedFourLineId);
                     }
                 }
             }
@@ -862,19 +979,20 @@ namespace Zuva.Services
         {
             if (_chart == null)
                 return;
-            
+
             string lineId = $"{stdDev.OneTime.Ticks}-{(isMinusTwo ? "two" : "four")}";
-            
+
             // Remove existing line
             _chart.RemoveObject(lineId);
-            
+
             // Create a new ID for the extended line to ensure it's not removed
-            string extendedLineId = $"{stdDev.OneTime.Ticks}-{(isMinusTwo ? "two" : "four")}-extended-{swingPoint.Time.Ticks}";
-            
+            string extendedLineId =
+                $"{stdDev.OneTime.Ticks}-{(isMinusTwo ? "two" : "four")}-extended-{swingPoint.Time.Ticks}";
+
             // Draw extended line
             double level = isMinusTwo ? stdDev.MinusTwo : stdDev.MinusFour;
             Color color = isMinusTwo ? Color.Green : Color.Red;
-            
+
             _chart.DrawTrendLine(
                 extendedLineId,
                 stdDev.OneTime,
@@ -885,14 +1003,14 @@ namespace Zuva.Services
                 1,
                 LineStyle.Solid
             );
-            
+
             // Store the extended line ID in the standard deviation for future reference
             if (isMinusTwo)
                 stdDev.ExtendedTwoLineId = extendedLineId;
             else
                 stdDev.ExtendedFourLineId = extendedLineId;
         }
-        
+
         // Update the RemoveStandardDeviations method to handle extended lines
         public void RemoveStandardDeviations(SwingPoint swingPoint)
         {
@@ -902,22 +1020,22 @@ namespace Zuva.Services
                 var deviationsToRemove = _standardDeviations
                     .Where(sd => sd.Index == swingPoint.Index)
                     .ToList();
-    
+
                 foreach (var sd in deviationsToRemove)
                 {
                     _standardDeviations.Remove(sd);
-    
+
                     // Clean up chart objects
                     if (_chart != null)
                     {
                         // Clean up the original lines
                         _chart.RemoveObject($"{sd.OneTime.Ticks}-two");
                         _chart.RemoveObject($"{sd.OneTime.Ticks}-four");
-                
+
                         // Clean up extended lines if they exist
                         if (!string.IsNullOrEmpty(sd.ExtendedTwoLineId))
                             _chart.RemoveObject(sd.ExtendedTwoLineId);
-                
+
                         if (!string.IsNullOrEmpty(sd.ExtendedFourLineId))
                             _chart.RemoveObject(sd.ExtendedFourLineId);
                     }
@@ -931,6 +1049,46 @@ namespace Zuva.Services
         public List<SwingPoint> GetExternalLiquidityPoints()
         {
             return _externalLiquidity;
+        }
+
+        // Add this new method to MarketStructureAnalyzer class
+        private void RemoveStandardDeviationsBySwingPointIndex(int swingPointIndex)
+        {
+            // Find any standard deviations associated with this swing point
+            var associatedDeviations = _standardDeviations
+                .Where(sd => sd.Index == swingPointIndex)
+                .ToList();
+
+            foreach (var stdDev in associatedDeviations)
+            {
+                // Keep track of which extended lines to preserve
+                string extendedTwoLineId = stdDev.ExtendedTwoLineId;
+                string extendedFourLineId = stdDev.ExtendedFourLineId;
+                bool isTwoSwept = stdDev.IsMinusTwoSwept;
+                bool isFourSwept = stdDev.IsMinusFourSwept;
+
+                // Remove from collection
+                _standardDeviations.Remove(stdDev);
+
+                // Remove chart lines for unswept levels
+                if (_chart != null && _showStdv)
+                {
+                    // Always remove original lines
+                    _chart.RemoveObject($"{stdDev.OneTime.Ticks}-two");
+                    _chart.RemoveObject($"{stdDev.OneTime.Ticks}-four");
+
+                    // Remove extended lines ONLY for unswept levels
+                    if (!isTwoSwept && !string.IsNullOrEmpty(extendedTwoLineId))
+                    {
+                        _chart.RemoveObject(extendedTwoLineId);
+                    }
+
+                    if (!isFourSwept && !string.IsNullOrEmpty(extendedFourLineId))
+                    {
+                        _chart.RemoveObject(extendedFourLineId);
+                    }
+                }
+            }
         }
 
         /// <summary>
