@@ -136,14 +136,19 @@ namespace Mwenje.Extensions
         {
             var time = standardDeviation.OneTime;
             var timePlusOne = time.AddMinutes(5);
+    
+            // Only draw MinusTwo if it's not swept (value > 0)
             if (standardDeviation.MinusTwo > 0)
             {
-                var two = chart.DrawTrendLine($"{standardDeviation.OneTime}-two", time,standardDeviation.MinusTwo, timePlusOne, standardDeviation.MinusTwo, Color.Green);
+                string twoId = $"{standardDeviation.OneTime.Ticks}-two";
+                chart.DrawTrendLine(twoId, time, standardDeviation.MinusTwo, timePlusOne, standardDeviation.MinusTwo, Color.Green);
             }
 
+            // Only draw MinusFour if it's not swept (value > 0)
             if (standardDeviation.MinusFour > 0)
             {
-                var four = chart.DrawTrendLine($"{standardDeviation.OneTime}-four", time,standardDeviation.MinusFour, timePlusOne, standardDeviation.MinusFour, Color.Red);
+                string fourId = $"{standardDeviation.OneTime.Ticks}-four";
+                chart.DrawTrendLine(fourId, time, standardDeviation.MinusFour, timePlusOne, standardDeviation.MinusFour, Color.Red);
             }
         }
         

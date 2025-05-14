@@ -21,7 +21,7 @@ namespace Zuva.Services
         private readonly IndicatorDataSeries _hls; // Higher Lows
         private readonly bool _showStructure;
         private readonly bool _showChoch;
-        
+
         // Add a delegate for logging
         private readonly Action<string> _logger;
 
@@ -53,7 +53,7 @@ namespace Zuva.Services
 
         // Reference to all swing points
         private List<SwingPoint> _swingPoints = new List<SwingPoint>();
-        
+
         // Collection for Standard Deviations
         private bool _showStdv = false;
         private readonly List<StandardDeviation> _standardDeviations = new List<StandardDeviation>();
@@ -268,8 +268,8 @@ namespace Zuva.Services
                                 // Mark in indicator series
                                 if (low.Index >= 0 && low.Index < _lls.Count)
                                     _lls[low.Index] = low.Price;
-                                
-                                
+
+
                                 CreateStandardDeviation(low, to, low.Time);
                             }
                         }
@@ -370,7 +370,7 @@ namespace Zuva.Services
                             // Mark in indicator series
                             if (point.Index >= 0 && point.Index < _lls.Count)
                                 _lls[point.Index] = point.Price;
-                            
+
                             CreateStandardDeviation(point, to, to.Time);
                         }
                     }
@@ -470,7 +470,7 @@ namespace Zuva.Services
                             // Mark in indicator series
                             if (low.Index >= 0 && low.Index < _lls.Count)
                                 _lls[low.Index] = low.Price;
-                            
+
                             CreateStandardDeviation(low, to, to.Time);
                         }
                     }
@@ -516,7 +516,7 @@ namespace Zuva.Services
                                 // Mark in indicator series
                                 if (high.Index >= 0 && high.Index < _hhs.Count)
                                     _hhs[high.Index] = high.Price;
-                                
+
                                 CreateStandardDeviation(high, to, to.Time);
                             }
                         }
@@ -617,7 +617,7 @@ namespace Zuva.Services
                             // Mark in indicator series
                             if (point.Index >= 0 && point.Index < _hhs.Count)
                                 _hhs[point.Index] = point.Price;
-                            
+
                             CreateStandardDeviation(point, to, to.Time);
                         }
                     }
@@ -718,12 +718,15 @@ namespace Zuva.Services
                             // Mark in indicator series
                             if (high.Index >= 0 && high.Index < _hhs.Count)
                                 _hhs[high.Index] = high.Price;
-                            
+
                             CreateStandardDeviation(high, to, to.Time);
                         }
                     }
                 }
             }
+
+            // Check if this swing point sweeps any standard deviation levels
+            CheckStandardDeviationSweep(swingPoint);
 
             UpdateBiasOnChart();
         }
@@ -745,22 +748,212 @@ namespace Zuva.Services
                 // Cannot use Print - must be handled externally
             }
         }
-        
+
         /// <summary>
         /// Creates a standard deviation calculation after a market structure change
         /// </summary>
+        // Update CreateStandardDeviation method to include direction
         private void CreateStandardDeviation(SwingPoint from, SwingPoint to, DateTime time)
         {
             if (from == null || to == null)
                 return;
-        
-            var stdDev = new StandardDeviation(from.Index, from.Price, to.Price, time);
+
+            // Determine the direction based on price movement
+            Direction direction = from.Price > to.Price ? Direction.Down : Direction.Up;
+
+            var stdDev = new StandardDeviation(from.Index, from.Price, to.Price, time, direction);
             _standardDeviations.Add(stdDev);
-    
+
             // Draw the standard deviation levels
-            if (_chart != null)
+            if (_chart != null && _showStdv)
             {
                 _chart.DrawStandardDeviation(stdDev);
+            }
+        }
+
+// Add a method to check if a swing point sweeps a standard deviation
+        private void CheckStandardDeviationSweep(SwingPoint swingPoint)
+        {
+            // Skip if standard deviations are not being tracked
+            if (_standardDeviations == null || _standardDeviations.Count == 0)
+                return;
+
+            foreach (var stdDev in _standardDeviations.ToList())
+            {
+                if (stdDev.AllSwept)
+                {
+                    _standardDeviations.Remove(stdDev);
+                    continue;
+                }
+
+                // Skip if the standard deviation is from a higher index (created after this swing point)
+                if (stdDev.Index >= swingPoint.Index)
+                    continue;
+
+                // For bearish SDs (Direction.Down), check if the candle opened above and went below
+                if (stdDev.Direction == Direction.Down)
+                {
+                    // Check for MinusTwo level sweep
+                    if (stdDev.MinusTwo > 0 && swingPoint.Bar.Open > stdDev.MinusTwo &&
+                        swingPoint.Bar.Low < stdDev.MinusTwo)
+                    {
+                        // SD level has been swept
+                        swingPoint.ActivatedStdv = true; // Set the flag for score calculation
+                        swingPoint.SweptDeviation = stdDev;
+                        swingPoint.SweptMinusTwo = true;
+
+                        // Extend the line to the swing point
+                        ExtendStandardDeviationLine(stdDev, swingPoint, true);
+                        
+                        // Mark level as swept
+                        stdDev.MarkLevelAsSwept(true);
+                    }
+
+                    // Check for MinusFour level sweep
+                    else if (stdDev.MinusFour > 0 && swingPoint.Bar.Open > stdDev.MinusFour &&
+                             swingPoint.Bar.Low < stdDev.MinusFour)
+                    {
+                        // SD level has been swept
+                        swingPoint.ActivatedStdv = true; // Set the flag for score calculation
+                        swingPoint.SweptDeviation = stdDev;
+                        swingPoint.SweptMinusTwo = false;
+
+                        // Extend the line to the swing point
+                        ExtendStandardDeviationLine(stdDev, swingPoint, false);
+                        
+                        // Mark level as swept
+                        stdDev.MarkLevelAsSwept(false);
+                    }
+                }
+                // For bullish SDs (Direction.Up), check if the candle opened below and went above
+                else
+                {
+                    // Check for MinusTwo level sweep
+                    if (stdDev.MinusTwo > 0 && swingPoint.Bar.Open < stdDev.MinusTwo &&
+                        swingPoint.Bar.High > stdDev.MinusTwo)
+                    {
+                        // SD level has been swept
+                        swingPoint.ActivatedStdv = true; // Set the flag for score calculation
+                        swingPoint.SweptDeviation = stdDev;
+                        swingPoint.SweptMinusTwo = true;
+
+                        // Extend the line to the swing point
+                        ExtendStandardDeviationLine(stdDev, swingPoint, true);
+                        
+                        // Mark level as swept
+                        stdDev.MarkLevelAsSwept(true);
+                    }
+
+                    // Check for MinusFour level sweep
+                    else if (stdDev.MinusFour > 0 && swingPoint.Bar.Open < stdDev.MinusFour &&
+                             swingPoint.Bar.High > stdDev.MinusFour)
+                    {
+                        // SD level has been swept
+                        swingPoint.ActivatedStdv = true; // Set the flag for score calculation
+                        swingPoint.SweptDeviation = stdDev;
+                        swingPoint.SweptMinusTwo = false;
+
+                        // Extend the line to the swing point
+                        ExtendStandardDeviationLine(stdDev, swingPoint, false);
+                        
+                        // Mark level as swept
+                        stdDev.MarkLevelAsSwept(false);
+                    }
+                }
+
+                // If all levels are swept, remove from collection
+                if (stdDev.AllSwept)
+                {
+                    _standardDeviations.Remove(stdDev);
+                }
+            }
+        }
+
+// Add a method to extend the standard deviation line to the sweeping swing point
+        private void ExtendStandardDeviationLine(StandardDeviation stdDev, SwingPoint swingPoint, bool isMinusTwo)
+        {
+            var time = swingPoint.Time;
+            if (time == new DateTime(2025, 05, 13, 04, 40, 00))
+            {
+                _logger($"{time}");
+                _chart.DrawVerticalLine($"{swingPoint.Time}-line", swingPoint.Time, Color.Red, 1, LineStyle.Solid);
+                _chart.DrawVerticalLine($"{stdDev.OneTime}-line", stdDev.OneTime, Color.Red, 1, LineStyle.Solid);
+                _logger($"STDV: {stdDev.Index}, 2: {stdDev.MinusTwo}, 4: {stdDev.MinusFour}");
+                _logger($"Swing: {swingPoint.Index}, Price: {swingPoint.Price}, Time: {swingPoint.Time}");
+                
+                // string lineId = $"{stdDev.OneTime.Ticks}-{(isMinusTwo ? "two" : "four")}";
+                //
+                // // Remove existing line
+                // _chart.RemoveObject(lineId);
+                //
+                // // Draw extended line
+                // double level = isMinusTwo ? stdDev.MinusTwo : stdDev.MinusFour;
+                // Color color = isMinusTwo ? Color.Green : Color.Red;
+                //
+                // _chart.DrawTrendLine(
+                //     lineId,
+                //     stdDev.OneTime,
+                //     level,
+                //     swingPoint.Time,
+                //     level,
+                //     color,
+                //     1,
+                //     LineStyle.Solid
+                // );
+            }
+            
+            if (_chart == null)
+                return;
+            
+            string lineId = $"{stdDev.OneTime.Ticks}-{(isMinusTwo ? "two" : "four")}";
+            
+            // Remove existing line
+            _chart.RemoveObject(lineId);
+            
+            // Draw extended line
+            double level = isMinusTwo ? stdDev.MinusTwo : stdDev.MinusFour;
+            Color color = isMinusTwo ? Color.Green : Color.Red;
+            
+            _chart.DrawTrendLine(
+                lineId,
+                stdDev.OneTime,
+                level,
+                swingPoint.Time,
+                level,
+                color,
+                1,
+                LineStyle.Solid
+            );
+        }
+        
+        // Remove Standard Deviations
+        public void RemoveStandardDeviations(SwingPoint swingPoint)
+        {
+            // Check if any standard deviations need to be removed
+            if (_standardDeviations != null)
+            {
+                var deviationsToRemove = _standardDeviations
+                    .Where(sd => sd.Index == swingPoint.Index)
+                    .ToList();
+            
+                foreach (var sd in deviationsToRemove)
+                {
+                    _standardDeviations.Remove(sd);
+            
+                    // Clean up chart objects
+                    if (_chart != null)
+                    {
+                        if (sd.MinusTwo >  0)
+                        {
+                            _chart.RemoveObject($"{sd.OneTime.Ticks}-two");
+                        }
+
+                        if (sd.MinusFour > 0)
+                        {
+                            _chart.RemoveObject($"{sd.OneTime.Ticks}-four");
+                        }
+                    }
+                }
             }
         }
 

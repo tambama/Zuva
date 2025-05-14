@@ -48,6 +48,10 @@ public class SwingPoint
     public bool ActivatedCISD { get; set; }
     public Level ActivatedCISDLevel { get; set; }
     
+    // Standard Deviations
+    public StandardDeviation SweptDeviation { get; set; }
+    public bool SweptMinusTwo { get; set; }  // To track which level was swept (MinusTwo or MinusFour)
+    
     // Score
     public int Score
     {
