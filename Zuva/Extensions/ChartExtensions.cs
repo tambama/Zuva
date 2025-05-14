@@ -136,19 +136,29 @@ namespace Mwenje.Extensions
         {
             var time = standardDeviation.OneTime;
             var timePlusOne = time.AddMinutes(5);
-    
-            // Only draw MinusTwo if it's not swept (value > 0)
-            if (standardDeviation.MinusTwo > 0)
+
+            // Draw MinusTwo if it's not already swept (check flag, not value)
+            if (!standardDeviation.IsMinusTwoSwept)
             {
                 string twoId = $"{standardDeviation.OneTime.Ticks}-two";
                 chart.DrawTrendLine(twoId, time, standardDeviation.MinusTwo, timePlusOne, standardDeviation.MinusTwo, Color.Green);
             }
+            // Otherwise, ensure extended line is still drawn if it exists
+            else if (!string.IsNullOrEmpty(standardDeviation.ExtendedTwoLineId))
+            {
+                // Don't remove extended lines
+            }
 
-            // Only draw MinusFour if it's not swept (value > 0)
-            if (standardDeviation.MinusFour > 0)
+            // Draw MinusFour if it's not already swept (check flag, not value)
+            if (!standardDeviation.IsMinusFourSwept)
             {
                 string fourId = $"{standardDeviation.OneTime.Ticks}-four";
                 chart.DrawTrendLine(fourId, time, standardDeviation.MinusFour, timePlusOne, standardDeviation.MinusFour, Color.Red);
+            }
+            // Otherwise, ensure extended line is still drawn if it exists
+            else if (!string.IsNullOrEmpty(standardDeviation.ExtendedFourLineId))
+            {
+                // Don't remove extended lines
             }
         }
         

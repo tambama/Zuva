@@ -20,6 +20,8 @@ public class StandardDeviation
         OneTime = date;
         Direction = direction;
         AllSwept = false;
+        IsMinusTwoSwept = false;
+        IsMinusFourSwept = false;
         _range = Math.Abs(zero - one);
         
         // Calculate the standard deviation values
@@ -34,6 +36,14 @@ public class StandardDeviation
     public int Index { get; set; }
     public Direction Direction { get; set; }
     public bool AllSwept { get; set; }
+    
+    // Add flags to track which levels are swept but keep values
+    public bool IsMinusTwoSwept { get; set; }
+    public bool IsMinusFourSwept { get; set; }
+    
+    // Add properties to store extended line IDs
+    public string ExtendedTwoLineId { get; set; }
+    public string ExtendedFourLineId { get; set; }
 
     private void CalculateDeviations()
     {
@@ -68,15 +78,19 @@ public class StandardDeviation
     {
         if (isMinusTwo)
         {
-            MinusTwo = 0;
+            // Instead of setting MinusTwo to 0, just mark it as swept but keep the value
+            // MinusTwo = 0;
+            IsMinusTwoSwept = true;
         }
         else
         {
-            MinusFour = 0;
+            // Instead of setting MinusFour to 0, just mark it as swept but keep the value
+            // MinusFour = 0;
+            IsMinusFourSwept = true;
         }
 
         // Check if all levels are swept
-        if (MinusTwo == 0 && MinusFour == 0)
+        if (IsMinusTwoSwept && IsMinusFourSwept)
         {
             AllSwept = true;
         }

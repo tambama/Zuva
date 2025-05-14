@@ -780,12 +780,6 @@ namespace Zuva.Services
 
             foreach (var stdDev in _standardDeviations.ToList())
             {
-                if (stdDev.AllSwept)
-                {
-                    _standardDeviations.Remove(stdDev);
-                    continue;
-                }
-
                 // Skip if the standard deviation is from a higher index (created after this swing point)
                 if (stdDev.Index >= swingPoint.Index)
                     continue;
@@ -860,48 +854,12 @@ namespace Zuva.Services
                         stdDev.MarkLevelAsSwept(false);
                     }
                 }
-
-                // If all levels are swept, remove from collection
-                if (stdDev.AllSwept)
-                {
-                    _standardDeviations.Remove(stdDev);
-                }
             }
         }
 
 // Add a method to extend the standard deviation line to the sweeping swing point
         private void ExtendStandardDeviationLine(StandardDeviation stdDev, SwingPoint swingPoint, bool isMinusTwo)
         {
-            var time = swingPoint.Time;
-            if (time == new DateTime(2025, 05, 13, 04, 40, 00))
-            {
-                _logger($"{time}");
-                _chart.DrawVerticalLine($"{swingPoint.Time}-line", swingPoint.Time, Color.Red, 1, LineStyle.Solid);
-                _chart.DrawVerticalLine($"{stdDev.OneTime}-line", stdDev.OneTime, Color.Red, 1, LineStyle.Solid);
-                _logger($"STDV: {stdDev.Index}, 2: {stdDev.MinusTwo}, 4: {stdDev.MinusFour}");
-                _logger($"Swing: {swingPoint.Index}, Price: {swingPoint.Price}, Time: {swingPoint.Time}");
-                
-                // string lineId = $"{stdDev.OneTime.Ticks}-{(isMinusTwo ? "two" : "four")}";
-                //
-                // // Remove existing line
-                // _chart.RemoveObject(lineId);
-                //
-                // // Draw extended line
-                // double level = isMinusTwo ? stdDev.MinusTwo : stdDev.MinusFour;
-                // Color color = isMinusTwo ? Color.Green : Color.Red;
-                //
-                // _chart.DrawTrendLine(
-                //     lineId,
-                //     stdDev.OneTime,
-                //     level,
-                //     swingPoint.Time,
-                //     level,
-                //     color,
-                //     1,
-                //     LineStyle.Solid
-                // );
-            }
-            
             if (_chart == null)
                 return;
             
@@ -910,12 +868,15 @@ namespace Zuva.Services
             // Remove existing line
             _chart.RemoveObject(lineId);
             
+            // Create a new ID for the extended line to ensure it's not removed
+            string extendedLineId = $"{stdDev.OneTime.Ticks}-{(isMinusTwo ? "two" : "four")}-extended-{swingPoint.Time.Ticks}";
+            
             // Draw extended line
             double level = isMinusTwo ? stdDev.MinusTwo : stdDev.MinusFour;
             Color color = isMinusTwo ? Color.Green : Color.Red;
             
             _chart.DrawTrendLine(
-                lineId,
+                extendedLineId,
                 stdDev.OneTime,
                 level,
                 swingPoint.Time,
@@ -924,9 +885,15 @@ namespace Zuva.Services
                 1,
                 LineStyle.Solid
             );
+            
+            // Store the extended line ID in the standard deviation for future reference
+            if (isMinusTwo)
+                stdDev.ExtendedTwoLineId = extendedLineId;
+            else
+                stdDev.ExtendedFourLineId = extendedLineId;
         }
         
-        // Remove Standard Deviations
+        // Update the RemoveStandardDeviations method to handle extended lines
         public void RemoveStandardDeviations(SwingPoint swingPoint)
         {
             // Check if any standard deviations need to be removed
@@ -935,23 +902,24 @@ namespace Zuva.Services
                 var deviationsToRemove = _standardDeviations
                     .Where(sd => sd.Index == swingPoint.Index)
                     .ToList();
-            
+    
                 foreach (var sd in deviationsToRemove)
                 {
                     _standardDeviations.Remove(sd);
-            
+    
                     // Clean up chart objects
                     if (_chart != null)
                     {
-                        if (sd.MinusTwo >  0)
-                        {
-                            _chart.RemoveObject($"{sd.OneTime.Ticks}-two");
-                        }
-
-                        if (sd.MinusFour > 0)
-                        {
-                            _chart.RemoveObject($"{sd.OneTime.Ticks}-four");
-                        }
+                        // Clean up the original lines
+                        _chart.RemoveObject($"{sd.OneTime.Ticks}-two");
+                        _chart.RemoveObject($"{sd.OneTime.Ticks}-four");
+                
+                        // Clean up extended lines if they exist
+                        if (!string.IsNullOrEmpty(sd.ExtendedTwoLineId))
+                            _chart.RemoveObject(sd.ExtendedTwoLineId);
+                
+                        if (!string.IsNullOrEmpty(sd.ExtendedFourLineId))
+                            _chart.RemoveObject(sd.ExtendedFourLineId);
                     }
                 }
             }
