@@ -114,20 +114,20 @@ namespace Zuva.Services
         }
 
         // Add the event handler method
-        private void OnLiquiditySwept(SwingPoint sweptPoint, int sweepingCandleIndex, Bar sweepingCandle)
+        private void OnLiquiditySwept(SwingPoint sweptPoint, int sweepingCandleIndex, Candle sweepingCandle)
         {
             if (_chart == null)
                 return;
 
-            // Get the label based on the liquidity type
-            string label = GetLiquidityLabel(sweptPoint.LiquidityType);
+            // Get the label based on the liquidity name
+            string label = GetLiquidityLabel(sweptPoint);
             if (string.IsNullOrEmpty(label))
                 return;
 
             // Create unique IDs for the original and extended lines
             string originalLineId = $"{label.ToLower()}-{sweptPoint.Time.Ticks}";
-            string extendedLineId =
-                $"{label.ToLower()}-extended-{sweptPoint.Time.Ticks}-{sweepingCandle.OpenTime.Ticks}";
+            string extendedLineId = 
+                $"{label.ToLower()}-extended-{sweptPoint.Time.Ticks}-{sweepingCandle.Time.Ticks}";
 
             // Remove the original line
             _chart.RemoveObject(originalLineId);
@@ -137,32 +137,22 @@ namespace Zuva.Services
                 extendedLineId,
                 sweptPoint.Time,
                 sweptPoint.Price,
-                sweepingCandle.OpenTime,
+                sweepingCandle.Time,
                 sweptPoint.Price,
-                label,
+                label,  // Use the same label when extending
                 LineStyle.Solid,
-                Color.Wheat,
+                Color.FromArgb(75, Color.Wheat),
                 true, // Show label
-                true // Remove existing
+                true, // Remove existing
+                labelOnRight:true
             );
         }
 
 // Helper method to get a label from liquidity type
-        private string GetLiquidityLabel(LiquidityType liquidityType)
+        private string GetLiquidityLabel(SwingPoint sweptPoint)
         {
-            switch (liquidityType)
-            {
-                case LiquidityType.PDH:
-                    return "PDH";
-                case LiquidityType.PDL:
-                    return "PDL";
-                case LiquidityType.PSH:
-                    return "PSH";
-                case LiquidityType.PSL:
-                    return "PSL";
-                default:
-                    return "";
-            }
+            // Use the LiquidityName directly as it's already the short code we want
+            return sweptPoint.LiquidityName.ToString();
         }
 
         /// <summary>
@@ -500,7 +490,7 @@ namespace Zuva.Services
                 tracker.High,
                 tracker.HighTime,
                 highCandle,
-                SwingType.H,
+                SwingType.HH,
                 highLiquidityType,
                 Direction.Up,
                 highLabel,
@@ -511,7 +501,7 @@ namespace Zuva.Services
                 tracker.Low,
                 tracker.LowTime,
                 lowCandle,
-                SwingType.L,
+                SwingType.LL,
                 lowLiquidityType,
                 Direction.Down,
                 lowLabel,
@@ -525,73 +515,79 @@ namespace Zuva.Services
         /// Creates a new swing point or updates an existing one at the same index
         /// </summary>
         private void CreateOrUpdateSpecialSwingPoint(
-            int index,
-            double price,
-            DateTime time,
-            Candle candle,
-            SwingType swingType,
-            LiquidityType liquidityType,
-            Direction direction,
-            string label,
-            DateTime endTime)
+    int index,
+    double price,
+    DateTime time,
+    Candle candle,
+    SwingType swingType,
+    LiquidityType liquidityType,
+    Direction direction,
+    string label,
+    DateTime endTime)
+{
+    if (_swingPointDetector == null)
+        return;
+
+    // Convert string label to LiquidityName enum
+    if (!Enum.TryParse(label, out LiquidityName liquidityName))
+        liquidityName = LiquidityName.N; // Default to Normal if parse fails
+
+    // Check if a swing point already exists at this index
+    var existingPoint = _swingPointDetector.GetSwingPointAtIndex(index);
+
+    if (existingPoint != null)
+    {
+        // If we're applying a PDH or PDL label and the existing point is not already a daily marker,
+        // then we need to clean up any existing session labels
+        if ((liquidityType == LiquidityType.PDH || liquidityType == LiquidityType.PDL) &&
+            existingPoint.LiquidityType != LiquidityType.PDH &&
+            existingPoint.LiquidityType != LiquidityType.PDL)
         {
-            if (_swingPointDetector == null)
-                return;
-
-            // Check if a swing point already exists at this index
-            var existingPoint = _swingPointDetector.GetSwingPointAtIndex(index);
-
-            if (existingPoint != null)
-            {
-                // If we're applying a PDH or PDL label and the existing point is not already a daily marker,
-                // then we need to clean up any existing session labels
-                if ((liquidityType == LiquidityType.PDH || liquidityType == LiquidityType.PDL) &&
-                    existingPoint.LiquidityType != LiquidityType.PDH &&
-                    existingPoint.LiquidityType != LiquidityType.PDL)
-                {
-                    // Remove existing session lines and labels before updating to daily
-                    RemoveExistingSessionLabels(time, price);
-                }
-
-                // Update the existing swing point with the new liquidity type
-                existingPoint.LiquidityType = liquidityType;
-            }
-            else
-            {
-                // Create a new swing point
-                var swingPoint = new SwingPoint(
-                    index,
-                    price,
-                    time,
-                    candle,
-                    swingType,
-                    liquidityType,
-                    direction
-                );
-
-                // Add to the swing detector
-                _swingPointDetector.AddSpecialSwingPoint(swingPoint);
-            }
-
-            // Draw the level line regardless of whether we created or updated the swing point
-            if (_chart != null)
-            {
-                string id = $"{label.ToLower()}-{time.Ticks}";
-
-                _chart.DrawStraightLine(
-                    id,
-                    time,
-                    price,
-                    endTime,
-                    price,
-                    label,
-                    LineStyle.Solid,
-                    Color.Wheat,
-                    true, // Show label
-                    true // Remove existing
-                );
-            }
+            // Remove existing session lines and labels before updating to daily
+            RemoveExistingSessionLabels(time, price);
         }
+
+        // Update the existing swing point with the new liquidity type and name
+        existingPoint.LiquidityType = liquidityType;
+        existingPoint.LiquidityName = liquidityName;
+    }
+    else
+    {
+        // Create a new swing point with both liquidity type and name
+        var swingPoint = new SwingPoint(
+            index,
+            price,
+            time,
+            candle,
+            swingType,
+            liquidityType,
+            direction,
+            liquidityName  // Pass the liquidity name to the constructor
+        );
+
+        // Add to the swing detector
+        _swingPointDetector.AddSpecialSwingPoint(swingPoint);
+    }
+
+    // Draw the level line regardless of whether we created or updated the swing point
+    if (_chart != null)
+    {
+        string id = $"{label.ToLower()}-{time.Ticks}";
+
+        _chart.DrawStraightLine(
+            id,
+            time,
+            price,
+            endTime,
+            price,
+            label,
+            LineStyle.Solid,
+            Color.Wheat,
+            true, // Show label
+            true // Remove existing
+        );
+    }
+}
 
 // Helper method to remove all possible session labels at a given time and price
         private void RemoveExistingSessionLabels(DateTime time, double price)

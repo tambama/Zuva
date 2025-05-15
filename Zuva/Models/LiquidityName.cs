@@ -17,6 +17,8 @@ public enum LiquidityName
     [Description("Pre AM Low")] NYPL,
     [Description("AM High")] NYAMH,
     [Description("AM Low")] NYAML,
+    [Description("NY L High")] NYLH,
+    [Description("NY L Low")] NYLL,
     [Description("Pre-NY High")] NYPPH,
     [Description("Pre-NY Low")] NYPPL,
     [Description("PM High")] NYPMH,

@@ -5,7 +5,7 @@ namespace Zuva.Extensions
 {
     public static class ChartExtensions
     {
-        public static void DrawStraightLine(this Chart chart, string id, DateTime startTime, double startPrice, DateTime endTime, double endPrice, string label = null, LineStyle lineStyle = LineStyle.Solid, Color color = null, bool hasLabel = false, bool removeExisting = false, bool extended = false, bool editable = false)
+        public static void DrawStraightLine(this Chart chart, string id, DateTime startTime, double startPrice, DateTime endTime, double endPrice, string label = null, LineStyle lineStyle = LineStyle.Solid, Color color = null, bool hasLabel = false, bool removeExisting = false, bool extended = false, bool editable = false, bool labelOnRight = false)
         {
             color ??= Color.Wheat;
 
@@ -29,8 +29,15 @@ namespace Zuva.Extensions
             if (!hasLabel) return;
         
             chart.RemoveObject($"{id}-label");
-            var text = chart.DrawText($"{id}-label", label, startTime, startPrice, color);
-            text.HorizontalAlignment = HorizontalAlignment.Right;
+    
+            // Position the text either at the start or end of the line based on labelOnRight parameter
+            DateTime textTime = labelOnRight ? endTime : startTime;
+            double textPrice = labelOnRight ? endPrice : startPrice;
+    
+            var text = chart.DrawText($"{id}-label", label, textTime, textPrice, color);
+    
+            // Set horizontal alignment based on position
+            text.HorizontalAlignment = labelOnRight ? HorizontalAlignment.Left : HorizontalAlignment.Right;
         }
     
         public static void DrawCycle(this Chart chart, List<TimeRange> cycles, DateTime time)

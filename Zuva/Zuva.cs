@@ -296,6 +296,11 @@ namespace Zuva
                                 }
                             }
                             
+                            if (swingPoint.Bar != null && _swingDetector != null)
+                            {
+                                _swingDetector.CheckForSweptLiquidity(swingPoint.Bar, swingPoint.Index);
+                            }
+                            
                             // Process for PD Array analysis
                             if (_pdArrayAnalyzer != null)
                             {

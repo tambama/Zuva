@@ -946,14 +946,14 @@ namespace Zuva.Services
         /// <summary>
         /// Checks if the new bar sweeps any important liquidity points (PDH, PDL, PSH, PSL)
         /// </summary>
-        public void CheckForSweptLiquidity(Bar currentBar, int currentIndex)
+        public void CheckForSweptLiquidity(Candle currentBar, int currentIndex)
         {
             // Get all swing points that could be swept
             var liquidityPoints = _swingPoints.Where(sp =>
-                sp.LiquidityType == LiquidityType.PDH ||
+                (sp.LiquidityType == LiquidityType.PDH ||
                 sp.LiquidityType == LiquidityType.PDL ||
                 sp.LiquidityType == LiquidityType.PSH ||
-                sp.LiquidityType == LiquidityType.PSL).ToList();
+                sp.LiquidityType == LiquidityType.PSL) && !sp.Swept).ToList();
 
             foreach (var point in liquidityPoints)
             {
@@ -990,12 +990,12 @@ namespace Zuva.Services
 
 // Define delegate and event for swept liquidity
         public delegate void LiquiditySweptEventHandler(SwingPoint sweptPoint, int sweepingCandleIndex,
-            Bar sweepingCandle);
+            Candle sweepingCandle);
 
         public event LiquiditySweptEventHandler LiquiditySwept;
 
 // Method to trigger the event
-        protected virtual void OnLiquiditySwept(SwingPoint sweptPoint, int sweepingCandleIndex, Bar sweepingCandle)
+        protected virtual void OnLiquiditySwept(SwingPoint sweptPoint, int sweepingCandleIndex, Candle sweepingCandle)
         {
             LiquiditySwept?.Invoke(sweptPoint, sweepingCandleIndex, sweepingCandle);
         }

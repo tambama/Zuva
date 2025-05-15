@@ -87,7 +87,7 @@ public class SwingPoint
 
     public SwingPoint(int index, double price, DateTime time, Candle bar, SwingType swingType,
         LiquidityType liquidityType = LiquidityType.Normal, Direction direction = Direction.Up,
-        LiquidityName liquidityName = LiquidityName.AH)
+        LiquidityName liquidityName = LiquidityName.N)
     {
         Index = index;
         Price = price;
