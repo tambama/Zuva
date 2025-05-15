@@ -141,7 +141,7 @@ namespace Zuva.Services
                 sweptPoint.Price,
                 label,  // Use the same label when extending
                 LineStyle.Solid,
-                Color.FromArgb(75, Color.Wheat),
+                Color.FromArgb(40, Color.Red),
                 true, // Show label
                 true, // Remove existing
                 labelOnRight:true
