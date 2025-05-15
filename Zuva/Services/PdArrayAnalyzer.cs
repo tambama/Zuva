@@ -1886,7 +1886,7 @@ namespace Zuva.Services
                 // If quadrants were swept, mark the swing point
                 if (sweptQuadrants.Count > 0)
                 {
-                    swingPoint.SweptQuadrant = true;
+                    swingPoint.InsideKeyLevel = true;
 
                     // Update visualization for swept quadrants
                     if (_showQuadrants)

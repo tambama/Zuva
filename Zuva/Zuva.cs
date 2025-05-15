@@ -622,7 +622,7 @@ namespace Zuva
         // Get swing points that swept quadrants
         public List<SwingPoint> GetSwingPointsThatSweptQuadrants()
         {
-            return _swingPoints?.Where(sp => sp.SweptQuadrant).ToList() ?? new List<SwingPoint>();
+            return _swingPoints?.Where(sp => sp.InsideKeyLevel).ToList() ?? new List<SwingPoint>();
         }
     }
 }
