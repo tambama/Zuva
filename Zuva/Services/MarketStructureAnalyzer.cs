@@ -909,7 +909,10 @@ namespace Zuva.Services
                         swingPoint.SweptMinusTwo = true;
 
                         // Extend the line to the swing point
-                        ExtendStandardDeviationLine(stdDev, swingPoint, true);
+                        if (_showStdv)
+                        {
+                            ExtendStandardDeviationLine(stdDev, swingPoint, true);
+                        }
 
                         // Mark level as swept
                         stdDev.MarkLevelAsSwept(true);
@@ -932,7 +935,10 @@ namespace Zuva.Services
                         swingPoint.SweptMinusTwo = false;
 
                         // Extend the line to the swing point
-                        ExtendStandardDeviationLine(stdDev, swingPoint, false);
+                        if (_showStdv)
+                        {
+                            ExtendStandardDeviationLine(stdDev, swingPoint, false);
+                        }
 
                         // Mark level as swept
                         stdDev.MarkLevelAsSwept(false);
