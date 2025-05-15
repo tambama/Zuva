@@ -1853,52 +1853,87 @@ namespace Zuva.Services
         }
 
         /// <summary>
-        /// Checks if a swing point swept any quadrants in opposite-direction PD Arrays
-        /// </summary>
-        public void CheckQuadrantsOnSwingPoint(SwingPoint swingPoint)
+/// Checks if a swing point swept any quadrants in opposite-direction PD Arrays
+/// </summary>
+public void CheckQuadrantsOnSwingPoint(SwingPoint swingPoint)
+{
+    // Skip if swing point is null
+    if (swingPoint == null)
+        return;
+
+    // Process only PD Arrays with the OPPOSITE direction of the swing point
+    // Bullish swing points can sweep bearish PD arrays
+    // Bearish swing points can sweep bullish PD arrays
+    Direction pdArrayDirection = swingPoint.Direction == Direction.Up ? Direction.Down : Direction.Up;
+
+    // Get all relevant PD Array types: regular orderflow, FVGs, and OrderBlocks
+    var eligiblePdArrays = new List<Level>();
+
+    // Add regular PD Arrays
+    eligiblePdArrays.AddRange(_pdArrays.Where(l => l.Direction == pdArrayDirection && l.IsActive));
+
+    // Add FVGs
+    eligiblePdArrays.AddRange(_fvgs.Where(l => l.Direction == pdArrayDirection && l.IsActive));
+
+    // Add OrderBlocks
+    eligiblePdArrays.AddRange(_orderBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive));
+
+    // First, identify all PD arrays that had quadrants swept
+    var pdArraysWithSweptQuadrants = new List<(Level pdArray, List<Quadrant> sweptQuadrants)>();
+    
+    foreach (var pdArray in eligiblePdArrays)
+    {
+        // Check if any quadrants were swept by this swing point
+        var sweptQuadrants = pdArray.CheckForSweptQuadrants(swingPoint);
+        
+        // If quadrants were swept, add this PD array to our list
+        if (sweptQuadrants.Count > 0)
         {
-            // Skip if swing point is null
-            if (swingPoint == null)
-                return;
-
-            // Process only PD Arrays with the OPPOSITE direction of the swing point
-            // Bullish swing points can sweep bearish PD arrays
-            // Bearish swing points can sweep bullish PD arrays
-            Direction pdArrayDirection = swingPoint.Direction == Direction.Up ? Direction.Down : Direction.Up;
-
-            // Get all relevant PD Array types: regular orderflow, FVGs, and OrderBlocks
-            var eligiblePdArrays = new List<Level>();
-
-            // Add regular PD Arrays
-            eligiblePdArrays.AddRange(_pdArrays.Where(l => l.Direction == pdArrayDirection && l.IsActive));
-
-            // Add FVGs
-            eligiblePdArrays.AddRange(_fvgs.Where(l => l.Direction == pdArrayDirection && l.IsActive));
-
-            // Add OrderBlocks
-            eligiblePdArrays.AddRange(_orderBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive));
-
-            foreach (var pdArray in eligiblePdArrays)
+            pdArraysWithSweptQuadrants.Add((pdArray, sweptQuadrants));
+            
+            // Update visualization for swept quadrants
+            if (_showQuadrants)
             {
-                // Check if any quadrants were swept by this swing point
-                var sweptQuadrants = pdArray.CheckForSweptQuadrants(swingPoint);
-
-                // If quadrants were swept, mark the swing point
-                if (sweptQuadrants.Count > 0)
+                foreach (var quadrant in sweptQuadrants)
                 {
-                    swingPoint.InsideKeyLevel = true;
-
-                    // Update visualization for swept quadrants
-                    if (_showQuadrants)
-                    {
-                        foreach (var quadrant in sweptQuadrants)
-                        {
-                            UpdateQuadrantVisualization(pdArray, quadrant);
-                        }
-                    }
+                    UpdateQuadrantVisualization(pdArray, quadrant);
                 }
             }
         }
+    }
+    
+    // If we have PD arrays with swept quadrants, find the oldest one (lowest index)
+    if (pdArraysWithSweptQuadrants.Count > 0)
+    {
+        // Sort by index (ascending) to find the oldest PD array
+        var oldestPdArray = pdArraysWithSweptQuadrants
+            .OrderBy(item => item.pdArray.Index)
+            .First()
+            .pdArray;
+        
+        // Check if the swing point closed inside the extreme boundary of the oldest PD array
+        bool closedInsideExtreme = false;
+        
+        // For bearish PD arrays, check if bullish swing point closed below the high
+        if (oldestPdArray.Direction == Direction.Down && swingPoint.Direction == Direction.Up)
+        {
+            closedInsideExtreme = swingPoint.Bar.Close < oldestPdArray.High;
+        }
+        // For bullish PD arrays, check if bearish swing point closed above the low
+        else if (oldestPdArray.Direction == Direction.Up && swingPoint.Direction == Direction.Down)
+        {
+            closedInsideExtreme = swingPoint.Bar.Close > oldestPdArray.Low;
+        }
+        
+        // Only mark the swing point if it closed inside extreme boundary of the oldest PD array
+        if (closedInsideExtreme)
+        {
+            swingPoint.InsideKeyLevel = true;
+            Color color = swingPoint.Direction == Direction.Up ? Color.Green : Color.Red;
+            _chart.DrawIcon($"kl-{swingPoint.Time}", ChartIconType.Circle, swingPoint.Time, swingPoint.Price, color);
+        }
+    }
+}
 
         #endregion
 
