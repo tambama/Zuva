@@ -42,6 +42,7 @@ namespace Zuva.Services
         // FVG and Order Block visualization flags (moved from FvgDetector)
         private readonly bool _showFVG;
         private readonly bool _showOrderBlock;
+        private readonly bool _showQuadrants;
 
         // Flag to control CISD visualization
         private readonly bool _showCISD;
@@ -79,6 +80,7 @@ namespace Zuva.Services
             bool showCISD = false,
             bool showBreakerBlock = false,
             bool showUnicorn = false,
+            bool showQuadrants = false,
             int maxCisdsPerDirection = 2,
             SwingPointDetector swingPointDetector = null,
             Action<string> logger = null)
@@ -93,6 +95,7 @@ namespace Zuva.Services
             _showCISD = showCISD;
             _showBreakerBlock = showBreakerBlock;
             _showUnicorn = showUnicorn;
+            _showQuadrants = showQuadrants;
             _maxCisdsPerDirection = maxCisdsPerDirection;
             _swingPointDetector = swingPointDetector;
             _logger = logger ?? (_ => { });
@@ -144,6 +147,9 @@ namespace Zuva.Services
                     currentIndex - 1, // Store the middle candle index for Gauntlet detection
                     Zone.Premium // FVGs in an uptrend are typically in the Premium zone
                 );
+                
+                // Initialize quadrants for the bullish FVG
+                bullishFVG.InitializeQuadrants();
 
                 // Add to collection - always store FVGs regardless of visibility setting
                 _fvgs.Add(bullishFVG);
@@ -229,6 +235,9 @@ namespace Zuva.Services
                     currentIndex - 1, // Store the middle candle index for Gauntlet detection
                     Zone.Discount // FVGs in a downtrend are typically in the Discount zone
                 );
+                
+                // Initialize quadrants for the bearish FVG
+                bearishFVG.InitializeQuadrants();
 
                 // Add to collection - always store FVGs regardless of visibility setting
                 _fvgs.Add(bearishFVG);
@@ -309,6 +318,9 @@ namespace Zuva.Services
                     ob.Index == orderBlock.Index &&
                     ob.Direction == orderBlock.Direction))
             {
+                // Initialize quadrants for the bearish order block
+                orderBlock.InitializeQuadrants();
+                
                 _orderBlocks.Add(orderBlock);
 
                 // Draw the order block if visualization is enabled
@@ -343,6 +355,9 @@ namespace Zuva.Services
                     ob.Index == orderBlock.Index &&
                     ob.Direction == orderBlock.Direction))
             {
+                // Initialize quadrants for the bullish order block
+                orderBlock.InitializeQuadrants();
+                
                 _orderBlocks.Add(orderBlock);
 
                 // Draw the order block if visualization is enabled
@@ -366,6 +381,12 @@ namespace Zuva.Services
 
             // Use the extended chart extension method for better FVG visualization
             _chart.DrawFairValueGap(fvg, id);
+            
+            // Draw quadrant levels for the FVG
+            if (_showFVG && _showQuadrants)
+            {
+                DrawQuadrantLevels(fvg);
+            }
         }
 
         /// <summary>
@@ -386,26 +407,12 @@ namespace Zuva.Services
                 true, // Draw midpoint
                 20 // Higher opacity for order blocks to make them more visible
             );
-        }
-
-        /// <summary>
-        /// Checks if a level is in a Fair Value Gap
-        /// </summary>
-        public bool IsInFVG(double price, DateTime time)
-        {
-            return _fvgs.Any(fvg =>
-                price >= fvg.Low && price <= fvg.High && time >= fvg.LowTime && time <= fvg.HighTime.AddMinutes(5));
-        }
-
-        /// <summary>
-        /// Checks if a level is in an Order Block
-        /// </summary>
-        public bool IsInOrderBlock(double price, DateTime time)
-        {
-            return _orderBlocks.Any(ob =>
-                price >= ob.Low &&
-                price <= ob.High &&
-                time >= ob.LowTime);
+            
+            // Draw quadrant levels for the order block
+            if (_showOrderBlock && _showQuadrants)
+            {
+                DrawQuadrantLevels(orderBlock);
+            }
         }
 
         /// <summary>
@@ -485,11 +492,8 @@ namespace Zuva.Services
                 ProcessNewSwingHigh(swingPoint);
             }
 
+            CheckQuadrantsOnSwingPoint(swingPoint);
             CheckCisdConfirmation(swingPoint, swingPoint.Index);
-
-            // Check if the swing point is in a FVG or Order Block
-            swingPoint.IsInFVG = IsInFVG(swingPoint.Price, swingPoint.Time);
-            swingPoint.IsInOrderBlock = IsInOrderBlock(swingPoint.Price, swingPoint.Time);
         }
 
         /// <summary>
@@ -687,6 +691,8 @@ namespace Zuva.Services
                     previousSwingLow.Index // IndexLow is the previous swing low index
                 );
 
+                InitializeQuadrants(bullishOrderFlow);
+
                 // Check for swept swing highs
                 CheckForSweptSwingHighs(bullishOrderFlow);
 
@@ -757,6 +763,8 @@ namespace Zuva.Services
                     previousSwingHigh.Index, // IndexHigh is the previous swing high index
                     recentSwingLow.Index // IndexLow is the recent swing low index
                 );
+
+                InitializeQuadrants(bearishOrderFlow);
 
                 // Check for swept swing lows
                 CheckForSweptSwingLows(bearishOrderFlow);
@@ -1744,6 +1752,156 @@ namespace Zuva.Services
 
         #endregion
 
+        #region Helpers for all patters
+
+        /// <summary>
+        /// Initializes quadrants for a newly created PD Array
+        /// </summary>
+        private void InitializeQuadrants(Level pdArray)
+        {
+            // Initialize the five quadrant points (0%, 25%, 50%, 75%, 100%)
+            pdArray.InitializeQuadrants();
+
+            // Draw quadrant levels if visualization is enabled
+            if (_showOrderFlow && _showQuadrants)
+            {
+                DrawQuadrantLevels(pdArray);
+            }
+        }
+
+        /// <summary>
+        /// Draws horizontal lines for each quadrant level of a PD Array
+        /// </summary>
+        private void DrawQuadrantLevels(Level pdArray)
+        {
+            if (_chart == null)
+                return;
+
+            DateTime startTime = pdArray.Direction == Direction.Up ? pdArray.LowTime : pdArray.HighTime;
+            DateTime endTime = pdArray.Direction == Direction.Up ? pdArray.HighTime : pdArray.LowTime;
+
+            // Use pink for all unswept quadrants as requested
+            Color unsweptColor = Color.Pink;
+            Color sweptColor = Color.Gray;
+
+            // Use different line styles for each quadrant
+            LineStyle[] styles = new LineStyle[]
+            {
+                LineStyle.Solid, // 0%
+                LineStyle.Dots, // 25%
+                LineStyle.Solid, // 50% (mid)
+                LineStyle.Dots, // 75%
+                LineStyle.Solid // 100%
+            };
+
+            // Draw each quadrant line
+            for (int i = 0; i < pdArray.Quadrants.Count; i++)
+            {
+                var quadrant = pdArray.Quadrants[i];
+
+                // Create a unique ID for this quadrant line
+                string id = $"quad-{pdArray.Direction}-{pdArray.Index}-{quadrant.Percent}";
+
+                // Draw the line with appropriate style and color (pink for unswept, gray for swept)
+                _chart.DrawStraightLine(
+                    id,
+                    startTime,
+                    quadrant.Price,
+                    endTime,
+                    quadrant.Price,
+                    null,
+                    styles[i],
+                    quadrant.IsSwept ? sweptColor : unsweptColor,
+                    removeExisting:true
+                );
+            }
+        }
+
+        /// <summary>
+        /// Updates the visualization when a quadrant is swept
+        /// </summary>
+        private void UpdateQuadrantVisualization(Level pdArray, Quadrant quadrant)
+        {
+            if (_chart == null)
+                return;
+
+            // Create a unique ID for this quadrant line
+            string id = $"quad-{pdArray.Direction}-{pdArray.Index}-{quadrant.Percent}";
+
+            // Remove the original line
+            _chart.RemoveObject(id);
+
+            // Calculate start and end times
+            DateTime startTime = pdArray.Direction == Direction.Up ? pdArray.LowTime : pdArray.HighTime;
+            DateTime endTime = pdArray.Direction == Direction.Up ? pdArray.HighTime : pdArray.LowTime;
+
+            // Determine line style based on percentage
+            LineStyle style = (quadrant.Percent % 50 == 0) ? LineStyle.Solid : LineStyle.Dots;
+
+            // Draw a gray line to indicate it's swept
+            _chart.DrawStraightLine(
+                id,
+                startTime,
+                quadrant.Price,
+                endTime,
+                quadrant.Price,
+                null,
+                style,
+                Color.Gray,
+                removeExisting:true
+            );
+        }
+
+        /// <summary>
+        /// Checks if a swing point swept any quadrants in opposite-direction PD Arrays
+        /// </summary>
+        public void CheckQuadrantsOnSwingPoint(SwingPoint swingPoint)
+        {
+            // Skip if swing point is null
+            if (swingPoint == null)
+                return;
+
+            // Process only PD Arrays with the OPPOSITE direction of the swing point
+            // Bullish swing points can sweep bearish PD arrays
+            // Bearish swing points can sweep bullish PD arrays
+            Direction pdArrayDirection = swingPoint.Direction == Direction.Up ? Direction.Down : Direction.Up;
+
+            // Get all relevant PD Array types: regular orderflow, FVGs, and OrderBlocks
+            var eligiblePdArrays = new List<Level>();
+
+            // Add regular PD Arrays
+            eligiblePdArrays.AddRange(_pdArrays.Where(l => l.Direction == pdArrayDirection && l.IsActive));
+
+            // Add FVGs
+            eligiblePdArrays.AddRange(_fvgs.Where(l => l.Direction == pdArrayDirection && l.IsActive));
+
+            // Add OrderBlocks
+            eligiblePdArrays.AddRange(_orderBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive));
+
+            foreach (var pdArray in eligiblePdArrays)
+            {
+                // Check if any quadrants were swept by this swing point
+                var sweptQuadrants = pdArray.CheckForSweptQuadrants(swingPoint);
+
+                // If quadrants were swept, mark the swing point
+                if (sweptQuadrants.Count > 0)
+                {
+                    swingPoint.SweptQuadrant = true;
+
+                    // Update visualization for swept quadrants
+                    if (_showQuadrants)
+                    {
+                        foreach (var quadrant in sweptQuadrants)
+                        {
+                            UpdateQuadrantVisualization(pdArray, quadrant);
+                        }
+                    }
+                }
+            }
+        }
+
+        #endregion
+
         #region Getters for all pattern types
 
         // Getter methods for Unicorns
@@ -1844,6 +2002,18 @@ namespace Zuva.Services
             return _breakerBlocks.Where(b => b.Direction == Direction.Down).ToList();
         }
 
+        // Add a method to get active PD Arrays
+        public List<Level> GetActivePdArrays()
+        {
+            return _pdArrays.Where(l => l.IsActive).ToList();
+        }
+
+// Add a method to get active PD Arrays by direction
+        public List<Level> GetActivePdArrays(Direction direction)
+        {
+            return _pdArrays.Where(l => l.IsActive && l.Direction == direction).ToList();
+        }
+
         // Initialize with existing swing points
         public void Initialize(List<SwingPoint> swingPoints)
         {
@@ -1873,9 +2043,8 @@ namespace Zuva.Services
                     ProcessNewSwingHigh(currentPoint);
                 }
 
-                // Check if the swing point is in a FVG or Order Block
-                currentPoint.IsInFVG = IsInFVG(currentPoint.Price, currentPoint.Time);
-                currentPoint.IsInOrderBlock = IsInOrderBlock(currentPoint.Price, currentPoint.Time);
+                // NEW: Check if this swing point sweeps any quadrants
+                CheckQuadrantsOnSwingPoint(currentPoint);
             }
         }
 

@@ -53,7 +53,8 @@ namespace Zuva
         public bool ShowUnicorn { get; set; }
         [Parameter("Show Gauntlets", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowGauntlet { get; set; }
-        
+        [Parameter("Show Quadrants", Group = "PD Arrays", DefaultValue = false)]
+        public bool ShowQuadrants { get; set; }
         [Parameter("Show Liquidity Sweeps", Group = "Liquidity", DefaultValue = true)]
         public bool ShowLiquiditySweep { get; set; }
         [Parameter("Show STDv", Group = "Liquidity", DefaultValue = true)]
@@ -159,6 +160,7 @@ namespace Zuva
                     ShowCISD,
                     ShowBreakerBlock,
                     ShowUnicorn,
+                    ShowQuadrants,
                     MaxCisdsPerDirection, 
                     _swingDetector,          // Pass swing detector for order block detection
                     message => Print(message));
@@ -587,6 +589,40 @@ namespace Zuva
         public Level GetLastUnicorn(Direction direction)
         {
             return _pdArrayAnalyzer?.GetLastUnicorn(direction);
+        }
+        
+        // Add these public methods to expose active PD Array information
+        public List<Level> GetActivePdArrays()
+        {
+            return _pdArrayAnalyzer?.GetActivePdArrays() ?? new List<Level>();
+        }
+
+        public List<Level> GetActiveBullishPdArrays()
+        {
+            return _pdArrayAnalyzer?.GetActivePdArrays(Direction.Up) ?? new List<Level>();
+        }
+
+        public List<Level> GetActiveBearishPdArrays()
+        {
+            return _pdArrayAnalyzer?.GetActivePdArrays(Direction.Down) ?? new List<Level>();
+        }
+
+        // Get active FVGs (where at least one quadrant is not swept)
+        public List<Level> GetActiveFVGs()
+        {
+            return _pdArrayAnalyzer?.GetAllFVGs().Where(fvg => fvg.IsActive).ToList() ?? new List<Level>();
+        }
+
+        // Get active OrderBlocks (where at least one quadrant is not swept)
+        public List<Level> GetActiveOrderBlocks()
+        {
+            return _pdArrayAnalyzer?.GetAllOrderBlocks().Where(ob => ob.IsActive).ToList() ?? new List<Level>();
+        }
+
+        // Get swing points that swept quadrants
+        public List<SwingPoint> GetSwingPointsThatSweptQuadrants()
+        {
+            return _swingPoints?.Where(sp => sp.SweptQuadrant).ToList() ?? new List<SwingPoint>();
         }
     }
 }
