@@ -4,7 +4,6 @@ using Zuva.Models;
 using System.Collections.Generic;
 using Zuva.Extensions;
 using System;
-using Mwenje.Extensions;
 
 namespace Zuva
 {
@@ -139,7 +138,12 @@ namespace Zuva
             
             try
             {
-                _timeManager = new TimeManager(Chart, ShowMacros, UtcOffset);
+                _timeManager = new TimeManager(
+                    Chart, 
+                    Bars,
+                    _swingDetector,
+                    ShowMacros, 
+                    UtcOffset);
             }
             catch (Exception ex)
             {
@@ -221,7 +225,7 @@ namespace Zuva
             {
                 try
                 {
-                    _timeManager.ProcessBar(_currentBar.OpenTime);
+                    _timeManager.ProcessBar(index, _currentBar.OpenTime);
                 }
                 catch (Exception ex)
                 {

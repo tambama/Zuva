@@ -456,6 +456,30 @@ namespace Zuva.Services
             }
         }
 
+        public void AddSpecialSwingPoint(SwingPoint swingPoint)
+        {
+            if (swingPoint == null)
+                return;
+        
+            // Assign a number to the swing point
+            swingPoint.Number = ++_currentSwingPointNumber;
+    
+            // Add to collection
+            _swingPoints.Add(swingPoint);
+    
+            // Set indicator data series value
+            if (swingPoint.SwingType == SwingType.H)
+            {
+                _swingHighs[swingPoint.Index] = swingPoint.Price;
+                _lastHighSwingPoint = swingPoint;
+            }
+            else
+            {
+                _swingLows[swingPoint.Index] = swingPoint.Price;
+                _lastLowSwingPoint = swingPoint;
+            }
+        }
+
         public void ProcessHighTimeframeBar(Candle htfCandle)
         {
             // Skip if we don't have valid data
@@ -950,7 +974,7 @@ namespace Zuva.Services
         {
             return _swingPoints.Find(sp => sp.Index == index);
         }
-        
+
         public List<SwingPoint> GetSwingPointsAtIndex(int index)
         {
             return _swingPoints.FindAll(sp => sp.Index == index);

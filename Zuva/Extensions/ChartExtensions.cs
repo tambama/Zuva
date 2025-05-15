@@ -1,7 +1,7 @@
 using cAlgo.API;
 using Zuva.Models;
 
-namespace Mwenje.Extensions
+namespace Zuva.Extensions
 {
     public static class ChartExtensions
     {
