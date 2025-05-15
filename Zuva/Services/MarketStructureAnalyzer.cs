@@ -987,9 +987,10 @@ namespace Zuva.Services
         }
 
 // Add a method to extend the standard deviation line to the sweeping swing point
+        // Modify the ExtendStandardDeviationLine method in MarketStructureAnalyzer.cs
         private void ExtendStandardDeviationLine(StandardDeviation stdDev, SwingPoint swingPoint, bool isMinusTwo)
         {
-            if (_chart == null )
+            if (_chart == null)
                 return;
 
             string lineId = $"{stdDev.OneTime.Ticks}-{(isMinusTwo ? "two" : "four")}";
@@ -997,30 +998,36 @@ namespace Zuva.Services
             // Remove existing line
             _chart.RemoveObject(lineId);
 
-            // Create a new ID for the extended line to ensure it's not removed
-            string extendedLineId =
-                $"{stdDev.OneTime.Ticks}-{(isMinusTwo ? "two" : "four")}-extended-{swingPoint.Time.Ticks}";
+            // Create a new ID for the swept line
+            string sweptLineId =
+                $"{stdDev.OneTime.Ticks}-{(isMinusTwo ? "two" : "four")}-swept-{swingPoint.Time.Ticks}";
 
-            // Draw extended line
+            // Get the standard deviation level
             double level = isMinusTwo ? stdDev.MinusTwo : stdDev.MinusFour;
             Color color = isMinusTwo ? Color.Green : Color.Red;
 
+            // Calculate start and end times (3 units centered on the sweeping candle)
+            // Using 1 minute as the example timeframe unit
+            DateTime startTime = swingPoint.Time.AddMinutes(-2);
+            DateTime endTime = swingPoint.Time.AddMinutes(2);
+
+            // Draw a horizontal line at the level centered on the sweeping candle
             _chart.DrawTrendLine(
-                extendedLineId,
-                stdDev.OneTime,
+                sweptLineId,
+                startTime,
                 level,
-                swingPoint.Time,
+                endTime,
                 level,
                 color,
                 1,
                 LineStyle.Solid
             );
 
-            // Store the extended line ID in the standard deviation for future reference
+            // Store the swept line ID in the standard deviation for future reference
             if (isMinusTwo)
-                stdDev.ExtendedTwoLineId = extendedLineId;
+                stdDev.ExtendedTwoLineId = sweptLineId;
             else
-                stdDev.ExtendedFourLineId = extendedLineId;
+                stdDev.ExtendedFourLineId = sweptLineId;
         }
 
         // Update the RemoveStandardDeviations method to handle extended lines
