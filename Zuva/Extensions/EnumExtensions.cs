@@ -1,3 +1,6 @@
+using System;
+using System.ComponentModel;
+using System.Reflection;
 using cAlgo.API;
 using Zuva.Models;
 
@@ -17,5 +20,20 @@ public static class EnumExtensions
             LineType.OF => (Color.Aqua, LineStyle.Dots),
             _ => (Color.Gray, LineStyle.Solid)
         };
+    }
+    
+    /// <summary>
+    /// Gets the description attribute from an enum value
+    /// </summary>
+    public static string GetDescription(this Enum value)
+    {
+        FieldInfo field = value.GetType().GetField(value.ToString());
+        
+        if (field == null) 
+            return value.ToString();
+            
+        var attributes = (DescriptionAttribute[])field.GetCustomAttributes(typeof(DescriptionAttribute), false);
+        
+        return attributes.Length > 0 ? attributes[0].Description : value.ToString();
     }
 }

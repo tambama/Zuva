@@ -460,13 +460,13 @@ namespace Zuva.Services
         {
             if (swingPoint == null)
                 return;
-        
+
             // Assign a number to the swing point
             swingPoint.Number = ++_currentSwingPointNumber;
-    
+
             // Add to collection
             _swingPoints.Add(swingPoint);
-    
+
             // Set indicator data series value
             if (swingPoint.SwingType == SwingType.H)
             {
@@ -941,6 +941,63 @@ namespace Zuva.Services
                     return; // Finished processing this candle
                 }
             }
+        }
+
+        /// <summary>
+        /// Checks if the new bar sweeps any important liquidity points (PDH, PDL, PSH, PSL)
+        /// </summary>
+        public void CheckForSweptLiquidity(Bar currentBar, int currentIndex)
+        {
+            // Get all swing points that could be swept
+            var liquidityPoints = _swingPoints.Where(sp =>
+                sp.LiquidityType == LiquidityType.PDH ||
+                sp.LiquidityType == LiquidityType.PDL ||
+                sp.LiquidityType == LiquidityType.PSH ||
+                sp.LiquidityType == LiquidityType.PSL).ToList();
+
+            foreach (var point in liquidityPoints)
+            {
+                // Skip already swept points
+                if (point.Swept)
+                    continue;
+
+                bool wasSwept = false;
+
+                // Check for swept highs (PDH/PSH)
+                if ((point.LiquidityType == LiquidityType.PDH || point.LiquidityType == LiquidityType.PSH) &&
+                    currentBar.High >= point.Price && point.Index < currentIndex)
+                {
+                    wasSwept = true;
+                }
+                // Check for swept lows (PDL/PSL)
+                else if ((point.LiquidityType == LiquidityType.PDL || point.LiquidityType == LiquidityType.PSL) &&
+                         currentBar.Low <= point.Price && point.Index < currentIndex)
+                {
+                    wasSwept = true;
+                }
+
+                // If the point was swept, handle it
+                if (wasSwept)
+                {
+                    point.Swept = true;
+                    point.IndexOfSweepingCandle = currentIndex;
+
+                    // Notify via the SweptLiquidity event
+                    OnLiquiditySwept(point, currentIndex, currentBar);
+                }
+            }
+        }
+
+// Define delegate and event for swept liquidity
+        public delegate void LiquiditySweptEventHandler(SwingPoint sweptPoint, int sweepingCandleIndex,
+            Bar sweepingCandle);
+
+        public event LiquiditySweptEventHandler LiquiditySwept;
+
+// Method to trigger the event
+        protected virtual void OnLiquiditySwept(SwingPoint sweptPoint, int sweepingCandleIndex, Bar sweepingCandle)
+        {
+            LiquiditySwept?.Invoke(sweptPoint, sweepingCandleIndex, sweepingCandle);
         }
 
         // Methods to retrieve swing points

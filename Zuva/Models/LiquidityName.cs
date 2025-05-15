@@ -5,14 +5,22 @@ namespace Zuva.Models;
 public enum LiquidityName
 {
     [Description("Normal")] N,
-    [Description("Asian High")] AH,
-    [Description("Asian Low")] AL,
-    [Description("London High")] LH,
-    [Description("London Low")] LL,
-    [Description("AM High")] NAH,
-    [Description("AM Low")] NAL,
-    [Description("PM High")] NPH,
-    [Description("PM Low")] NPL,
-    [Description("PD High")] PDH,
-    [Description("PD Low")] PDL
+    [Description("A High")] AH,
+    [Description("A Low")] AL,
+    [Description("Pre-L High")]LPH,
+    [Description("Pre-L Low")]LPL,
+    [Description("LN High")] LH,
+    [Description("LN Low")] LL,
+    [Description("LN Lunch High")] LLH,
+    [Description("LN Lunch Low")] LLL,
+    [Description("Pre AM High")] NYPH,
+    [Description("Pre AM Low")] NYPL,
+    [Description("AM High")] NYAMH,
+    [Description("AM Low")] NYAML,
+    [Description("Pre-NY High")] NYPPH,
+    [Description("Pre-NY Low")] NYPPL,
+    [Description("PM High")] NYPMH,
+    [Description("PM Low")] NYPML,
+    [Description("Daily High")] PDH,
+    [Description("Daily Low")] PDL
 }
