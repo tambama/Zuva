@@ -43,6 +43,7 @@ namespace Zuva.Services
         private readonly bool _showFVG;
         private readonly bool _showOrderBlock;
         private readonly bool _showQuadrants;
+        private readonly bool _showInsideKeyLevel;
 
         // Flag to control CISD visualization
         private readonly bool _showCISD;
@@ -81,6 +82,7 @@ namespace Zuva.Services
             bool showBreakerBlock = false,
             bool showUnicorn = false,
             bool showQuadrants = false,
+            bool showInsideKeyLevel = false,
             int maxCisdsPerDirection = 2,
             SwingPointDetector swingPointDetector = null,
             Action<string> logger = null)
@@ -96,6 +98,7 @@ namespace Zuva.Services
             _showBreakerBlock = showBreakerBlock;
             _showUnicorn = showUnicorn;
             _showQuadrants = showQuadrants;
+            _showInsideKeyLevel = showInsideKeyLevel;
             _maxCisdsPerDirection = maxCisdsPerDirection;
             _swingPointDetector = swingPointDetector;
             _logger = logger ?? (_ => { });
@@ -147,7 +150,7 @@ namespace Zuva.Services
                     currentIndex - 1, // Store the middle candle index for Gauntlet detection
                     Zone.Premium // FVGs in an uptrend are typically in the Premium zone
                 );
-                
+
                 // Initialize quadrants for the bullish FVG
                 bullishFVG.InitializeQuadrants();
 
@@ -235,7 +238,7 @@ namespace Zuva.Services
                     currentIndex - 1, // Store the middle candle index for Gauntlet detection
                     Zone.Discount // FVGs in a downtrend are typically in the Discount zone
                 );
-                
+
                 // Initialize quadrants for the bearish FVG
                 bearishFVG.InitializeQuadrants();
 
@@ -320,7 +323,7 @@ namespace Zuva.Services
             {
                 // Initialize quadrants for the bearish order block
                 orderBlock.InitializeQuadrants();
-                
+
                 _orderBlocks.Add(orderBlock);
 
                 // Draw the order block if visualization is enabled
@@ -357,7 +360,7 @@ namespace Zuva.Services
             {
                 // Initialize quadrants for the bullish order block
                 orderBlock.InitializeQuadrants();
-                
+
                 _orderBlocks.Add(orderBlock);
 
                 // Draw the order block if visualization is enabled
@@ -381,7 +384,7 @@ namespace Zuva.Services
 
             // Use the extended chart extension method for better FVG visualization
             _chart.DrawFairValueGap(fvg, id);
-            
+
             // Draw quadrant levels for the FVG
             if (_showFVG && _showQuadrants)
             {
@@ -407,7 +410,7 @@ namespace Zuva.Services
                 true, // Draw midpoint
                 20 // Higher opacity for order blocks to make them more visible
             );
-            
+
             // Draw quadrant levels for the order block
             if (_showOrderBlock && _showQuadrants)
             {
@@ -923,6 +926,7 @@ namespace Zuva.Services
 
             // First, find the last FVG within the orderflow
             var lastFvgInOrderflow = FindLastFVGInOrderflow(orderflow, _fvgs);
+            SwingPoint lastSwingPoint = null;
 
             // If we found a matching FVG, check if its second or third candle is the sweeping candle
             if (lastFvgInOrderflow != null)
@@ -935,6 +939,8 @@ namespace Zuva.Services
                     isSweepingCandlePartOfFVG =
                         (lastFvgInOrderflow.IndexMid == sweepingCandleIndex) ||
                         (lastFvgInOrderflow.IndexHigh == sweepingCandleIndex);
+
+                    lastSwingPoint = _swingPointHistory.FirstOrDefault(o => o.Index == orderflow.IndexHigh);
                 }
                 else // Direction.Down
                 {
@@ -942,6 +948,8 @@ namespace Zuva.Services
                     isSweepingCandlePartOfFVG =
                         (lastFvgInOrderflow.IndexMid == sweepingCandleIndex) ||
                         (lastFvgInOrderflow.IndexLow == sweepingCandleIndex);
+                    
+                    lastSwingPoint = _swingPointHistory.FirstOrDefault(o => o.Index == orderflow.IndexLow);
                 }
 
                 // If the sweeping candle is part of the FVG, mark it as a Gauntlet
@@ -958,6 +966,7 @@ namespace Zuva.Services
                                              g.Direction == lastFvgInOrderflow.Direction))
                     {
                         _gauntlets.Add(lastFvgInOrderflow);
+                        DrawInsideKeyLevelIcon(lastSwingPoint);
                     }
 
                     // Draw it if visualization is enabled
@@ -965,8 +974,6 @@ namespace Zuva.Services
                     {
                         DrawGauntlet(lastFvgInOrderflow);
                     }
-
-                    return; // Exit early - we found our Gauntlet
                 }
             }
         }
@@ -1036,6 +1043,15 @@ namespace Zuva.Services
 
             // If no specific candle is found, default to the extreme index
             return orderflow.Direction == Direction.Up ? orderflow.IndexHigh : orderflow.IndexLow;
+        }
+
+        private void DrawInsideKeyLevelIcon(SwingPoint swingPoint)
+        {
+            if (_chart == null || !swingPoint.InsideKeyLevel || !_showInsideKeyLevel)
+                return;
+            
+            Color color = swingPoint.Direction == Direction.Up ? Color.Green : Color.Red;
+            _chart.DrawIcon($"kl-{swingPoint.Time}", ChartIconType.Circle, swingPoint.Time, swingPoint.Price, color);
         }
 
         /// <summary>
@@ -1752,7 +1768,7 @@ namespace Zuva.Services
 
         #endregion
 
-        #region Helpers for all patters
+        #region Helpers for all patterns
 
         /// <summary>
         /// Initializes quadrants for a newly created PD Array
@@ -1812,7 +1828,7 @@ namespace Zuva.Services
                     null,
                     styles[i],
                     quadrant.IsSwept ? sweptColor : unsweptColor,
-                    removeExisting:true
+                    removeExisting: true
                 );
             }
         }
@@ -1848,92 +1864,87 @@ namespace Zuva.Services
                 null,
                 style,
                 Color.Gray,
-                removeExisting:true
+                removeExisting: true
             );
         }
 
         /// <summary>
-/// Checks if a swing point swept any quadrants in opposite-direction PD Arrays
-/// </summary>
-public void CheckQuadrantsOnSwingPoint(SwingPoint swingPoint)
-{
-    // Skip if swing point is null
-    if (swingPoint == null)
-        return;
-
-    // Process only PD Arrays with the OPPOSITE direction of the swing point
-    // Bullish swing points can sweep bearish PD arrays
-    // Bearish swing points can sweep bullish PD arrays
-    Direction pdArrayDirection = swingPoint.Direction == Direction.Up ? Direction.Down : Direction.Up;
-
-    // Get all relevant PD Array types: regular orderflow, FVGs, and OrderBlocks
-    var eligiblePdArrays = new List<Level>();
-
-    // Add regular PD Arrays
-    eligiblePdArrays.AddRange(_pdArrays.Where(l => l.Direction == pdArrayDirection && l.IsActive));
-
-    // Add FVGs
-    eligiblePdArrays.AddRange(_fvgs.Where(l => l.Direction == pdArrayDirection && l.IsActive));
-
-    // Add OrderBlocks
-    eligiblePdArrays.AddRange(_orderBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive));
-
-    // First, identify all PD arrays that had quadrants swept
-    var pdArraysWithSweptQuadrants = new List<(Level pdArray, List<Quadrant> sweptQuadrants)>();
-    
-    foreach (var pdArray in eligiblePdArrays)
-    {
-        // Check if any quadrants were swept by this swing point
-        var sweptQuadrants = pdArray.CheckForSweptQuadrants(swingPoint);
-        
-        // If quadrants were swept, add this PD array to our list
-        if (sweptQuadrants.Count > 0)
+        /// Checks if a swing point swept any quadrants in opposite-direction PD Arrays
+        /// </summary>
+        private void CheckQuadrantsOnSwingPoint(SwingPoint swingPoint)
         {
-            pdArraysWithSweptQuadrants.Add((pdArray, sweptQuadrants));
-            
-            // Update visualization for swept quadrants
-            if (_showQuadrants)
+            // Skip if swing point is null
+            if (swingPoint == null)
+                return;
+
+            // Process only PD Arrays with the OPPOSITE direction of the swing point
+            // Bullish swing points can sweep bearish PD arrays
+            // Bearish swing points can sweep bullish PD arrays
+            Direction pdArrayDirection = swingPoint.Direction == Direction.Up ? Direction.Down : Direction.Up;
+
+            // Get all relevant PD Array types: regular orderflow, FVGs, and OrderBlocks
+            var eligiblePdArrays = new List<Level>();
+
+            // Add FVGs
+            eligiblePdArrays.AddRange(_fvgs.Where(l => l.Direction == pdArrayDirection && l.IsActive));
+
+            // Add OrderBlocks
+            eligiblePdArrays.AddRange(_orderBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive));
+
+            // First, identify all PD arrays that had quadrants swept
+            var pdArraysWithSweptQuadrants = new List<(Level pdArray, List<Quadrant> sweptQuadrants)>();
+
+            foreach (var pdArray in eligiblePdArrays)
             {
-                foreach (var quadrant in sweptQuadrants)
+                // Check if any quadrants were swept by this swing point
+                var sweptQuadrants = pdArray.CheckForSweptQuadrants(swingPoint);
+
+                // If quadrants were swept, add this PD array to our list
+                if (sweptQuadrants.Count > 0)
                 {
-                    UpdateQuadrantVisualization(pdArray, quadrant);
+                    pdArraysWithSweptQuadrants.Add((pdArray, sweptQuadrants));
+
+                    // Update visualization for swept quadrants
+                    if (_showQuadrants)
+                    {
+                        foreach (var quadrant in sweptQuadrants)
+                        {
+                            UpdateQuadrantVisualization(pdArray, quadrant);
+                        }
+                    }
+                }
+            }
+
+            // If we have PD arrays with swept quadrants, find the oldest one (lowest index)
+            if (pdArraysWithSweptQuadrants.Count > 0)
+            {
+                // Sort by index (ascending) to find the oldest PD array
+                var oldestPdArray = pdArraysWithSweptQuadrants
+                    .OrderBy(item => item.pdArray.Index)
+                    .First()
+                    .pdArray;
+
+                // Check if the swing point closed inside the extreme boundary of the oldest PD array
+                bool closedInsideExtreme = false;
+
+                // For bearish PD arrays, check if bullish swing point closed below the high
+                if (oldestPdArray.Direction == Direction.Down && swingPoint.Direction == Direction.Up)
+                {
+                    closedInsideExtreme = swingPoint.Bar.Close < oldestPdArray.High;
+                }
+                // For bullish PD arrays, check if bearish swing point closed above the low
+                else if (oldestPdArray.Direction == Direction.Up && swingPoint.Direction == Direction.Down)
+                {
+                    closedInsideExtreme = swingPoint.Bar.Close > oldestPdArray.Low;
+                }
+
+                // Only mark the swing point if it closed inside extreme boundary of the oldest PD array
+                if (closedInsideExtreme)
+                {
+                    swingPoint.InsideKeyLevel = true;
                 }
             }
         }
-    }
-    
-    // If we have PD arrays with swept quadrants, find the oldest one (lowest index)
-    if (pdArraysWithSweptQuadrants.Count > 0)
-    {
-        // Sort by index (ascending) to find the oldest PD array
-        var oldestPdArray = pdArraysWithSweptQuadrants
-            .OrderBy(item => item.pdArray.Index)
-            .First()
-            .pdArray;
-        
-        // Check if the swing point closed inside the extreme boundary of the oldest PD array
-        bool closedInsideExtreme = false;
-        
-        // For bearish PD arrays, check if bullish swing point closed below the high
-        if (oldestPdArray.Direction == Direction.Down && swingPoint.Direction == Direction.Up)
-        {
-            closedInsideExtreme = swingPoint.Bar.Close < oldestPdArray.High;
-        }
-        // For bullish PD arrays, check if bearish swing point closed above the low
-        else if (oldestPdArray.Direction == Direction.Up && swingPoint.Direction == Direction.Down)
-        {
-            closedInsideExtreme = swingPoint.Bar.Close > oldestPdArray.Low;
-        }
-        
-        // Only mark the swing point if it closed inside extreme boundary of the oldest PD array
-        if (closedInsideExtreme)
-        {
-            swingPoint.InsideKeyLevel = true;
-            Color color = swingPoint.Direction == Direction.Up ? Color.Green : Color.Red;
-            _chart.DrawIcon($"kl-{swingPoint.Time}", ChartIconType.Circle, swingPoint.Time, swingPoint.Price, color);
-        }
-    }
-}
 
         #endregion
 

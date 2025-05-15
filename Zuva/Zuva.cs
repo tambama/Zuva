@@ -55,6 +55,8 @@ namespace Zuva
         public bool ShowGauntlet { get; set; }
         [Parameter("Show Quadrants", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowQuadrants { get; set; }
+        [Parameter("Show Inside Key Level", Group = "PD Arrays", DefaultValue = false)]
+        public bool ShowInsideKeyLevel { get; set; }
         [Parameter("Show Liquidity Sweeps", Group = "Liquidity", DefaultValue = true)]
         public bool ShowLiquiditySweep { get; set; }
         [Parameter("Show STDv", Group = "Liquidity", DefaultValue = true)]
@@ -161,6 +163,7 @@ namespace Zuva
                     ShowBreakerBlock,
                     ShowUnicorn,
                     ShowQuadrants,
+                    ShowInsideKeyLevel,
                     MaxCisdsPerDirection, 
                     _swingDetector,          // Pass swing detector for order block detection
                     message => Print(message));
