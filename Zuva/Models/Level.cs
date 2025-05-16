@@ -45,6 +45,7 @@ namespace Zuva.Models
         public double? Entry { get; set; }
         public int IndexOfConfirmingCandle { get; set; }
         public Level BreakerBlock { get; set; }
+        public Level RejectionBlock { get; set; }
     
     
         // Properties for liquidity sweep tracking

@@ -23,5 +23,7 @@ public enum LevelType
     [Description("CISD")]
     CISD,
     [Description("Gauntlet")]
-    Gauntlet
+    Gauntlet,
+    [Description("Rejection Block")]
+    RejectionBlock,
 }

@@ -50,6 +50,8 @@ namespace Zuva
         [Parameter("Order Blocks", Group = "PD Arrays", DefaultValue = true)]
         public bool ShowOrderBlock { get; set; }
 
+        [Parameter("Rejection Blocks", Group = "PD Arrays", DefaultValue = false)]
+        public bool ShowRejectionBlock { get; set; }
         [Parameter("Breaker Blocks", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowBreakerBlock { get; set; }
 
@@ -192,6 +194,7 @@ namespace Zuva
                     ShowUnicorn,
                     ShowQuadrants,
                     ShowInsideKeyLevel,
+                    ShowRejectionBlock,
                     MaxCisdsPerDirection,
                     _swingDetector, // Pass swing detector for order block detection
                     ShowSMT,

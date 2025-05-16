@@ -22,6 +22,7 @@ namespace Zuva.Services
         // Collections for FVGs and Order Blocks (moved from FvgDetector)
         private readonly List<Level> _fvgs = new List<Level>();
         private readonly List<Level> _orderBlocks = new List<Level>();
+        private readonly List<Level> _rejectionBlocks = new List<Level>();
 
         // Store history of swing points to identify patterns
         private readonly List<SwingPoint> _swingPointHistory = new List<SwingPoint>();
@@ -43,6 +44,7 @@ namespace Zuva.Services
         private readonly bool _showOrderBlock;
         private readonly bool _showQuadrants;
         private readonly bool _showInsideKeyLevel;
+        private readonly bool _showRejectionBlock;
 
         // Flag to control CISD visualization
         private readonly bool _showCISD;
@@ -56,11 +58,14 @@ namespace Zuva.Services
         // Unicorns
         private readonly List<Level> _unicorns = new List<Level>();
         private readonly bool _showUnicorn;
-        
+
         // SMT
         private readonly bool _showSMT;
         private readonly string _smtPair;
-        public delegate double PairDataProviderDelegate(string pairSymbol, DateTime time, int index, Direction direction);
+
+        public delegate double PairDataProviderDelegate(string pairSymbol, DateTime time, int index,
+            Direction direction);
+
         public PairDataProviderDelegate PairDataProvider { get; set; }
 
         // Collection to store all gauntlet levels
@@ -88,6 +93,7 @@ namespace Zuva.Services
             bool showUnicorn = false,
             bool showQuadrants = false,
             bool showInsideKeyLevel = false,
+            bool showRejectionBlock = false,
             int maxCisdsPerDirection = 2,
             SwingPointDetector swingPointDetector = null,
             bool showSMT = false,
@@ -106,6 +112,7 @@ namespace Zuva.Services
             _showUnicorn = showUnicorn;
             _showQuadrants = showQuadrants;
             _showInsideKeyLevel = showInsideKeyLevel;
+            _showRejectionBlock = showRejectionBlock;
             _maxCisdsPerDirection = maxCisdsPerDirection;
             _swingPointDetector = swingPointDetector;
             _showSMT = showSMT;
@@ -493,6 +500,9 @@ namespace Zuva.Services
             // Sort the history by index to ensure chronological order
             _swingPointHistory.Sort((a, b) => a.Index.CompareTo(b.Index));
 
+            // Check for rejection block - add this line
+            CheckForRejectionBlock(swingPoint);
+
             if (swingPoint.Direction == Direction.Down)
             {
                 // Process a new swing low - calculate bullish orderflow
@@ -600,6 +610,24 @@ namespace Zuva.Services
                 }
             }
 
+            // Add rejection block cleanup
+            var rejectionBlocksToRemove = _rejectionBlocks
+                .Where(rb => rb.Index == removedPoint.Index)
+                .ToList();
+
+            foreach (var rb in rejectionBlocksToRemove)
+            {
+                _rejectionBlocks.Remove(rb);
+
+                // Clean up visualization
+                if (_chart != null)
+                {
+                    string id = $"rb-{rb.Direction}-{rb.Index}";
+                    _chart.RemoveObject(id);
+                    _chart.RemoveObject($"{id}-midline");
+                }
+            }
+
             // If we removed any arrays, we need to recalculate
             if (affectedArrays.Count > 0)
             {
@@ -702,7 +730,23 @@ namespace Zuva.Services
                     recentSwingHigh.Index, // IndexHigh is the recent swing high index
                     previousSwingLow.Index // IndexLow is the previous swing low index
                 );
-                
+
+                {
+                    // Look for bearish rejection blocks (from bullish swing points)
+                    var bearishRejectionBlocks = _rejectionBlocks
+                        .Where(rb => rb.Direction == Direction.Down)
+                        .OrderByDescending(rb => rb.Index)
+                        .ToList();
+
+                    // Associate the most recent bearish rejection block if it exists
+                    var recentBearishRejectionBlock = bearishRejectionBlocks.FirstOrDefault();
+                    if (recentBearishRejectionBlock != null)
+                    {
+                        // Store relationship
+                        bullishOrderFlow.RejectionBlock = recentBearishRejectionBlock;
+                    }
+                }
+
                 // For bullish orderflow, set SMT value only for the swing high
                 if (_showSMT && !string.IsNullOrEmpty(_smtPair))
                 {
@@ -786,7 +830,23 @@ namespace Zuva.Services
                     previousSwingHigh.Index, // IndexHigh is the previous swing high index
                     recentSwingLow.Index // IndexLow is the recent swing low index
                 );
-                
+
+                {
+                    // Look for bullish rejection blocks (from bearish swing points)
+                    var bullishRejectionBlocks = _rejectionBlocks
+                        .Where(rb => rb.Direction == Direction.Up)
+                        .OrderByDescending(rb => rb.Index)
+                        .ToList();
+
+                    // Associate the most recent bullish rejection block if it exists
+                    var recentBullishRejectionBlock = bullishRejectionBlocks.FirstOrDefault();
+                    if (recentBullishRejectionBlock != null)
+                    {
+                        // Store relationship
+                        bearishOrderFlow.RejectionBlock = recentBullishRejectionBlock;
+                    }
+                }
+
                 // For bearish orderflow, set SMT value only for the swing low
                 if (_showSMT && !string.IsNullOrEmpty(_smtPair))
                 {
@@ -872,22 +932,22 @@ namespace Zuva.Services
                 orderflow.SweptSwingPoint = highestSweptPoint;
 
                 DetectCisdLevel(orderflow);
-                
+
                 // Check for SMT divergence if enabled
                 if (_showSMT && !string.IsNullOrEmpty(_smtPair))
                 {
                     // Get the current swing point at sweeping candle index
                     var sweepingSwingPoint = _swingPointDetector.GetSwingPointAtIndex(sweepingCandleIndex);
-            
+
                     if (sweepingSwingPoint != null && highestSweptPoint != null)
                     {
                         // Check for SMT divergence when price makes new high but the pair makes a lower high
-                        if (sweepingSwingPoint.Price > highestSweptPoint.Price && 
+                        if (sweepingSwingPoint.Price > highestSweptPoint.Price &&
                             sweepingSwingPoint.SMTValue < highestSweptPoint.SMTValue)
                         {
                             sweepingSwingPoint.HasSMT = true;
                             sweepingSwingPoint.SMTSource = highestSweptPoint;
-                    
+
                             // Draw a dotted trendline connecting the points
                             DrawSmtDivergence(highestSweptPoint, sweepingSwingPoint);
                         }
@@ -949,22 +1009,22 @@ namespace Zuva.Services
                 orderflow.SweptSwingPoint = lowestSweptPoint;
 
                 DetectCisdLevel(orderflow);
-                
+
                 // Check for SMT divergence if enabled
                 if (_showSMT && !string.IsNullOrEmpty(_smtPair))
                 {
                     // Get the current swing point at sweeping candle index
                     var sweepingSwingPoint = _swingPointDetector.GetSwingPointAtIndex(sweepingCandleIndex);
-            
+
                     if (sweepingSwingPoint != null && lowestSweptPoint != null)
                     {
                         // Check for SMT divergence when price makes new low but the pair makes a higher low
-                        if (sweepingSwingPoint.Price < lowestSweptPoint.Price && 
+                        if (sweepingSwingPoint.Price < lowestSweptPoint.Price &&
                             sweepingSwingPoint.SMTValue > lowestSweptPoint.SMTValue)
                         {
                             sweepingSwingPoint.HasSMT = true;
                             sweepingSwingPoint.SMTSource = lowestSweptPoint;
-                    
+
                             // Draw a dotted trendline connecting the points
                             DrawSmtDivergence(lowestSweptPoint, sweepingSwingPoint);
                         }
@@ -1021,7 +1081,7 @@ namespace Zuva.Services
                     isSweepingCandlePartOfFVG =
                         (lastFvgInOrderflow.IndexMid == sweepingCandleIndex) ||
                         (lastFvgInOrderflow.IndexLow == sweepingCandleIndex);
-                    
+
                     lastSwingPoint = _swingPointHistory.FirstOrDefault(o => o.Index == orderflow.IndexLow);
                 }
 
@@ -1122,7 +1182,7 @@ namespace Zuva.Services
         {
             if (_chart == null || !swingPoint.InsideKeyLevel || !_showInsideKeyLevel)
                 return;
-            
+
             Color color = swingPoint.Direction == Direction.Up ? Color.Green : Color.Red;
             _chart.DrawIcon($"kl-{swingPoint.Time}", ChartIconType.Circle, swingPoint.Time, swingPoint.Price, color);
         }
@@ -1726,6 +1786,195 @@ namespace Zuva.Services
 
         #endregion
 
+        #region Rejection Blocks
+
+        private void CheckForRejectionBlock(SwingPoint swingPoint)
+        {
+            if (swingPoint == null || swingPoint.Bar == null)
+                return;
+
+            var candle = swingPoint.Bar;
+            bool isBullishCandle = candle.Close > candle.Open;
+            double bodySize = Math.Abs(candle.Close - candle.Open);
+
+            // Skip if body size is very small (to avoid division by zero or tiny bodies)
+            if (bodySize < 0.0001)
+                return;
+
+            // For Bullish Swing Points (creating Bearish Rejection Blocks)
+            if (swingPoint.Direction == Direction.Up)
+            {
+                // Calculate upper wick size - always use only the upper wick for bullish swing points
+                double upperWick;
+                double lowerBoundary;
+
+                if (isBullishCandle)
+                {
+                    // For bullish candles: upper wick = High - Close
+                    upperWick = candle.High - candle.Close;
+                    lowerBoundary = candle.Close;
+                }
+                else
+                {
+                    // For bearish candles: upper wick = High - Open
+                    upperWick = candle.High - candle.Open;
+                    lowerBoundary = candle.Open;
+                }
+
+                // Check if upper wick is significantly larger than body
+                if (upperWick > bodySize * 1.5) // Using 1.5x as threshold for significant rejection
+                {
+                    // Create a bearish rejection block
+                    var rejectionBlock = new Level(
+                        LevelType.RejectionBlock,
+                        lowerBoundary, // Lower boundary is where the wick starts
+                        candle.High, // Upper boundary is high
+                        candle.Time,
+                        candle.Time.AddMinutes(5), // 5 minute duration for visualization
+                        candle.Time,
+                        Direction.Down, // Bearish direction
+                        swingPoint.Index,
+                        swingPoint.Index,
+                        swingPoint.Index,
+                        swingPoint.Index,
+                        Zone.Premium // Typically in premium zone
+                    );
+
+                    // Initialize quadrants for the rejection block
+                    rejectionBlock.InitializeQuadrants();
+
+                    // Add to collection if not already present
+                    if (!_rejectionBlocks.Any(rb =>
+                            rb.Index == rejectionBlock.Index &&
+                            rb.Direction == rejectionBlock.Direction))
+                    {
+                        _rejectionBlocks.Add(rejectionBlock);
+
+                        // Draw if enabled
+                        if (_showRejectionBlock)
+                        {
+                            DrawRejectionBlock(rejectionBlock);
+                        }
+                    }
+                }
+            }
+            // For Bearish Swing Points (creating Bullish Rejection Blocks)
+            else if (swingPoint.Direction == Direction.Down)
+            {
+                // Calculate lower wick size - always use only the lower wick for bearish swing points
+                double lowerWick;
+                double upperBoundary;
+
+                if (isBullishCandle)
+                {
+                    // For bullish candles: lower wick = Open - Low
+                    lowerWick = candle.Open - candle.Low;
+                    upperBoundary = candle.Open;
+                }
+                else
+                {
+                    // For bearish candles: lower wick = Close - Low
+                    lowerWick = candle.Close - candle.Low;
+                    upperBoundary = candle.Close;
+                }
+
+                // Check if lower wick is significantly larger than body
+                if (lowerWick > bodySize * 1.5) // Using 1.5x as threshold for significant rejection
+                {
+                    // Create a bullish rejection block
+                    var rejectionBlock = new Level(
+                        LevelType.RejectionBlock,
+                        candle.Low, // Lower boundary is low
+                        upperBoundary, // Upper boundary is where the wick starts
+                        candle.Time,
+                        candle.Time.AddMinutes(5), // 5 minute duration for visualization
+                        candle.Time,
+                        Direction.Up, // Bullish direction
+                        swingPoint.Index,
+                        swingPoint.Index,
+                        swingPoint.Index,
+                        swingPoint.Index,
+                        Zone.Discount // Typically in discount zone
+                    );
+
+                    // Initialize quadrants for the rejection block
+                    rejectionBlock.InitializeQuadrants();
+
+                    // Add to collection if not already present
+                    if (!_rejectionBlocks.Any(rb =>
+                            rb.Index == rejectionBlock.Index &&
+                            rb.Direction == rejectionBlock.Direction))
+                    {
+                        _rejectionBlocks.Add(rejectionBlock);
+
+                        // Draw if enabled
+                        if (_showRejectionBlock)
+                        {
+                            DrawRejectionBlock(rejectionBlock);
+                        }
+                    }
+                }
+            }
+        }
+
+// Step 4: Method to draw rejection blocks
+        private void DrawRejectionBlock(Level rejectionBlock)
+        {
+            if (_chart == null)
+                return;
+
+            // Create a unique ID for this rejection block
+            string id = $"rb-{rejectionBlock.Direction}-{rejectionBlock.Index}";
+
+            // Set color based on direction
+            Color color = rejectionBlock.Direction == Direction.Up
+                ? Color.FromArgb(10, Color.Green)
+                : Color.FromArgb(10, Color.Red);
+
+            // Draw rectangle with distinctive style
+            var rectangle = _chart.DrawRectangle(
+                id,
+                rejectionBlock.LowTime,
+                rejectionBlock.Low,
+                rejectionBlock.HighTime,
+                rejectionBlock.High,
+                color);
+
+            rectangle.IsFilled = true;
+
+            // Draw dotted line for midpoint
+            string midLineId = $"{id}-midline";
+            _chart.DrawTrendLine(
+                midLineId,
+                rejectionBlock.LowTime,
+                rejectionBlock.Mid,
+                rejectionBlock.HighTime,
+                rejectionBlock.Mid,
+                Color.FromArgb(70, Color.White),
+                1,
+                LineStyle.Dots);
+        }
+
+        public List<Level> GetAllRejectionBlocks()
+        {
+            return _rejectionBlocks;
+        }
+
+        public List<Level> GetRejectionBlocks(Direction direction)
+        {
+            return _rejectionBlocks.Where(rb => rb.Direction == direction).ToList();
+        }
+
+        public Level GetLastRejectionBlock(Direction direction)
+        {
+            return _rejectionBlocks
+                .Where(rb => rb.Direction == direction)
+                .OrderByDescending(rb => rb.Index)
+                .FirstOrDefault();
+        }
+
+        #endregion
+
         #region Unicorn Detection
 
         // Add a new method to check for Unicorns when a new FVG is detected
@@ -1866,12 +2115,12 @@ namespace Zuva.Services
                 true, // Remove existing
                 false // Not extended
             );
-    
+
             // Draw an icon on the swing point with SMT divergence
-            _chart.DrawIcon($"smt-icon-{sweepingPoint.Time.Ticks}", ChartIconType.Star, 
+            _chart.DrawIcon($"smt-icon-{sweepingPoint.Time.Ticks}", ChartIconType.Star,
                 sweepingPoint.Time, sweepingPoint.Price, Color.FromArgb(60, Color.Yellow));
         }
-        
+
         /// <summary>
         /// Gets the price of the pair instrument at the given index
         /// </summary>
@@ -1884,18 +2133,18 @@ namespace Zuva.Services
                 // Skip if SMT is disabled or no pair is specified
                 if (!_showSMT || string.IsNullOrEmpty(_smtPair))
                     return 0;
-            
+
                 // Check if we have a data provider
                 if (PairDataProvider == null)
                 {
                     _logger?.Invoke($"No pair data provider available for {_smtPair}");
                     return 0;
                 }
-        
+
                 // Use the data provider to get the pair price
                 var time = Bars[index].OpenTime;
                 double price = PairDataProvider(_smtPair, time, index, direction);
-        
+
                 // Log the retrieved price for debugging
                 if (price > 0)
                 {
@@ -1905,7 +2154,7 @@ namespace Zuva.Services
                 {
                     _logger?.Invoke($"WARNING: Got zero pair price for {_smtPair} at index {index} for {direction}");
                 }
-        
+
                 return price;
             }
             catch (Exception ex)
@@ -2047,6 +2296,9 @@ namespace Zuva.Services
 
             // Add OrderBlocks
             eligiblePdArrays.AddRange(_orderBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive));
+            
+            // Add RejectionBlocks
+            eligiblePdArrays.AddRange(_rejectionBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive));
 
             // First, identify all PD arrays that had quadrants swept
             var pdArraysWithSweptQuadrants = new List<(Level pdArray, List<Quadrant> sweptQuadrants)>();
@@ -2248,6 +2500,12 @@ namespace Zuva.Services
 
                 // NEW: Check if this swing point sweeps any quadrants
                 CheckQuadrantsOnSwingPoint(currentPoint);
+            }
+
+            // Process each swing point to check for rejection blocks
+            foreach (var swingPoint in _swingPointHistory)
+            {
+                CheckForRejectionBlock(swingPoint);
             }
         }
 
