@@ -796,7 +796,7 @@ namespace Zuva.Services
             {
                 return;
             }
-            
+
             // Determine the direction based on price movement
             Direction direction = from.Price > to.Price ? Direction.Down : Direction.Up;
 
@@ -842,111 +842,252 @@ namespace Zuva.Services
                 if (stdDev.Index >= swingPoint.Index)
                     continue;
 
-                // For bearish SDs (Direction.Down), check if the candle opened above and went below
+                // Determine if candle is bullish or bearish
+                bool isBullishCandle = swingPoint.Bar.Close > swingPoint.Bar.Open;
+
+                // For bearish SDs (Direction.Down), check based on candle type
                 if (stdDev.Direction == Direction.Down)
                 {
                     // Check for MinusTwo level sweep
-                    if (!stdDev.IsMinusTwoSwept && stdDev.MinusTwo > 0 && swingPoint.Bar.Open > stdDev.MinusTwo &&
-                        swingPoint.Bar.Low < stdDev.MinusTwo)
+                    if (!stdDev.IsMinusTwoSwept && stdDev.MinusTwo > 0)
                     {
-                        // SD level has been swept
-                        swingPoint.ActivatedStdv = true; // Set the flag for score calculation
-                        swingPoint.SweptDeviation = stdDev;
-                        swingPoint.SweptMinusTwo = true;
+                        bool isSweep = false;
 
-                        // Extend the line to the swing point
-                        if (_showStdv)
+                        if (swingPoint.Direction == Direction.Down) // Bearish swing point
                         {
-                            ExtendStandardDeviationLine(stdDev, swingPoint, true);
+                            if (isBullishCandle)
+                            {
+                                // Bearish swing point, bullish candle: Low <= level AND Open > level
+                                isSweep = swingPoint.Bar.Low <= stdDev.MinusTwo &&
+                                          swingPoint.Bar.Open > stdDev.MinusTwo;
+                            }
+                            else
+                            {
+                                // Bearish swing point, bearish candle: Low <= level AND Close > level
+                                isSweep = swingPoint.Bar.Low <= stdDev.MinusTwo &&
+                                          swingPoint.Bar.Close > stdDev.MinusTwo;
+                            }
+                        }
+                        else // Direction.Up (Bullish swing point)
+                        {
+                            if (isBullishCandle)
+                            {
+                                // Bullish swing point, bullish candle: High >= level AND Close < level
+                                isSweep = swingPoint.Bar.High >= stdDev.MinusTwo &&
+                                          swingPoint.Bar.Close < stdDev.MinusTwo;
+                            }
+                            else
+                            {
+                                // Bullish swing point, bearish candle: High >= level AND Open < level
+                                isSweep = swingPoint.Bar.High >= stdDev.MinusTwo &&
+                                          swingPoint.Bar.Open < stdDev.MinusTwo;
+                            }
                         }
 
-                        // Mark level as swept
-                        stdDev.MarkLevelAsSwept(true);
-
-                        // Check if both levels are now swept
-                        if (stdDev.AllSwept)
+                        if (isSweep)
                         {
-                            deviationsToRemove.Add(stdDev);
+                            // SD level has been swept
+                            swingPoint.ActivatedStdv = true; // Set the flag for score calculation
+                            swingPoint.SweptDeviation = stdDev;
+                            swingPoint.SweptMinusTwo = true;
+
+                            // Extend the line to the swing point
+                            if (_showStdv)
+                            {
+                                ExtendStandardDeviationLine(stdDev, swingPoint, true);
+                            }
+
+                            // Mark level as swept
+                            stdDev.MarkLevelAsSwept(true);
+
+                            // Check if both levels are now swept
+                            if (stdDev.AllSwept)
+                            {
+                                deviationsToRemove.Add(stdDev);
+                            }
                         }
                     }
 
                     // Check for MinusFour level sweep
-                    else if (!stdDev.IsMinusFourSwept && stdDev.MinusFour > 0 &&
-                             swingPoint.Bar.Open > stdDev.MinusFour &&
-                             swingPoint.Bar.Low < stdDev.MinusFour)
+                    else if (!stdDev.IsMinusFourSwept && stdDev.MinusFour > 0)
                     {
-                        // SD level has been swept
-                        swingPoint.ActivatedStdv = true; // Set the flag for score calculation
-                        swingPoint.SweptDeviation = stdDev;
-                        swingPoint.SweptMinusTwo = false;
+                        bool isSweep = false;
 
-                        // Extend the line to the swing point
-                        if (_showStdv)
+                        if (swingPoint.Direction == Direction.Down) // Bearish swing point
                         {
-                            ExtendStandardDeviationLine(stdDev, swingPoint, false);
+                            if (isBullishCandle)
+                            {
+                                // Bearish swing point, bullish candle: Low <= level AND Open > level
+                                isSweep = swingPoint.Bar.Low <= stdDev.MinusFour &&
+                                          swingPoint.Bar.Open > stdDev.MinusFour;
+                            }
+                            else
+                            {
+                                // Bearish swing point, bearish candle: Low <= level AND Close > level
+                                isSweep = swingPoint.Bar.Low <= stdDev.MinusFour &&
+                                          swingPoint.Bar.Close > stdDev.MinusFour;
+                            }
+                        }
+                        else // Direction.Up (Bullish swing point)
+                        {
+                            if (isBullishCandle)
+                            {
+                                // Bullish swing point, bullish candle: High >= level AND Close < level
+                                isSweep = swingPoint.Bar.High >= stdDev.MinusFour &&
+                                          swingPoint.Bar.Close < stdDev.MinusFour;
+                            }
+                            else
+                            {
+                                // Bullish swing point, bearish candle: High >= level AND Open < level
+                                isSweep = swingPoint.Bar.High >= stdDev.MinusFour &&
+                                          swingPoint.Bar.Open < stdDev.MinusFour;
+                            }
                         }
 
-                        // Mark level as swept
-                        stdDev.MarkLevelAsSwept(false);
-
-                        // Check if both levels are now swept
-                        if (stdDev.AllSwept)
+                        if (isSweep)
                         {
-                            deviationsToRemove.Add(stdDev);
+                            // SD level has been swept
+                            swingPoint.ActivatedStdv = true; // Set the flag for score calculation
+                            swingPoint.SweptDeviation = stdDev;
+                            swingPoint.SweptMinusTwo = false;
+
+                            // Extend the line to the swing point
+                            if (_showStdv)
+                            {
+                                ExtendStandardDeviationLine(stdDev, swingPoint, false);
+                            }
+
+                            // Mark level as swept
+                            stdDev.MarkLevelAsSwept(false);
+
+                            // Check if both levels are now swept
+                            if (stdDev.AllSwept)
+                            {
+                                deviationsToRemove.Add(stdDev);
+                            }
                         }
                     }
                 }
-                // For bullish SDs (Direction.Up), check if the candle opened below and went above
+                // For bullish SDs (Direction.Up), check based on candle type
                 else
                 {
                     // Check for MinusTwo level sweep
-                    if (!stdDev.IsMinusTwoSwept && stdDev.MinusTwo > 0 && swingPoint.Bar.Open < stdDev.MinusTwo &&
-                        swingPoint.Bar.High > stdDev.MinusTwo)
+                    if (!stdDev.IsMinusTwoSwept && stdDev.MinusTwo > 0)
                     {
-                        // SD level has been swept
-                        swingPoint.ActivatedStdv = true; // Set the flag for score calculation
-                        swingPoint.SweptDeviation = stdDev;
-                        swingPoint.SweptMinusTwo = true;
+                        bool isSweep = false;
 
-                        // Extend the line to the swing point
-                        if (_showStdv)
+                        if (swingPoint.Direction == Direction.Down) // Bearish swing point
                         {
-                            ExtendStandardDeviationLine(stdDev, swingPoint, true);
+                            if (isBullishCandle)
+                            {
+                                // Bearish swing point, bullish candle: Low <= level AND Open > level
+                                isSweep = swingPoint.Bar.Low <= stdDev.MinusTwo &&
+                                          swingPoint.Bar.Open > stdDev.MinusTwo;
+                            }
+                            else
+                            {
+                                // Bearish swing point, bearish candle: Low <= level AND Close > level
+                                isSweep = swingPoint.Bar.Low <= stdDev.MinusTwo &&
+                                          swingPoint.Bar.Close > stdDev.MinusTwo;
+                            }
+                        }
+                        else // Direction.Up (Bullish swing point)
+                        {
+                            if (isBullishCandle)
+                            {
+                                // Bullish swing point, bullish candle: High >= level AND Close < level
+                                isSweep = swingPoint.Bar.High >= stdDev.MinusTwo &&
+                                          swingPoint.Bar.Close < stdDev.MinusTwo;
+                            }
+                            else
+                            {
+                                // Bullish swing point, bearish candle: High >= level AND Open < level
+                                isSweep = swingPoint.Bar.High >= stdDev.MinusTwo &&
+                                          swingPoint.Bar.Open < stdDev.MinusTwo;
+                            }
                         }
 
-                        // Mark level as swept
-                        stdDev.MarkLevelAsSwept(true);
-
-                        // Check if both levels are now swept
-                        if (stdDev.AllSwept)
+                        if (isSweep)
                         {
-                            deviationsToRemove.Add(stdDev);
+                            // SD level has been swept
+                            swingPoint.ActivatedStdv = true; // Set the flag for score calculation
+                            swingPoint.SweptDeviation = stdDev;
+                            swingPoint.SweptMinusTwo = true;
+
+                            // Extend the line to the swing point
+                            if (_showStdv)
+                            {
+                                ExtendStandardDeviationLine(stdDev, swingPoint, true);
+                            }
+
+                            // Mark level as swept
+                            stdDev.MarkLevelAsSwept(true);
+
+                            // Check if both levels are now swept
+                            if (stdDev.AllSwept)
+                            {
+                                deviationsToRemove.Add(stdDev);
+                            }
                         }
                     }
 
                     // Check for MinusFour level sweep
-                    else if (!stdDev.IsMinusFourSwept && stdDev.MinusFour > 0 &&
-                             swingPoint.Bar.Open < stdDev.MinusFour &&
-                             swingPoint.Bar.High > stdDev.MinusFour)
+                    else if (!stdDev.IsMinusFourSwept && stdDev.MinusFour > 0)
                     {
-                        // SD level has been swept
-                        swingPoint.ActivatedStdv = true; // Set the flag for score calculation
-                        swingPoint.SweptDeviation = stdDev;
-                        swingPoint.SweptMinusTwo = false;
+                        bool isSweep = false;
 
-                        // Extend the line to the swing point
-                        if (_showStdv)
+                        if (swingPoint.Direction == Direction.Down) // Bearish swing point
                         {
-                            ExtendStandardDeviationLine(stdDev, swingPoint, false);
+                            if (isBullishCandle)
+                            {
+                                // Bearish swing point, bullish candle: Low <= level AND Open > level
+                                isSweep = swingPoint.Bar.Low <= stdDev.MinusFour &&
+                                          swingPoint.Bar.Open > stdDev.MinusFour;
+                            }
+                            else
+                            {
+                                // Bearish swing point, bearish candle: Low <= level AND Close > level
+                                isSweep = swingPoint.Bar.Low <= stdDev.MinusFour &&
+                                          swingPoint.Bar.Close > stdDev.MinusFour;
+                            }
+                        }
+                        else // Direction.Up (Bullish swing point)
+                        {
+                            if (isBullishCandle)
+                            {
+                                // Bullish swing point, bullish candle: High >= level AND Close < level
+                                isSweep = swingPoint.Bar.High >= stdDev.MinusFour &&
+                                          swingPoint.Bar.Close < stdDev.MinusFour;
+                            }
+                            else
+                            {
+                                // Bullish swing point, bearish candle: High >= level AND Open < level
+                                isSweep = swingPoint.Bar.High >= stdDev.MinusFour &&
+                                          swingPoint.Bar.Open < stdDev.MinusFour;
+                            }
                         }
 
-                        // Mark level as swept
-                        stdDev.MarkLevelAsSwept(false);
-
-                        // Check if both levels are now swept
-                        if (stdDev.AllSwept)
+                        if (isSweep)
                         {
-                            deviationsToRemove.Add(stdDev);
+                            // SD level has been swept
+                            swingPoint.ActivatedStdv = true; // Set the flag for score calculation
+                            swingPoint.SweptDeviation = stdDev;
+                            swingPoint.SweptMinusTwo = false;
+
+                            // Extend the line to the swing point
+                            if (_showStdv)
+                            {
+                                ExtendStandardDeviationLine(stdDev, swingPoint, false);
+                            }
+
+                            // Mark level as swept
+                            stdDev.MarkLevelAsSwept(false);
+
+                            // Check if both levels are now swept
+                            if (stdDev.AllSwept)
+                            {
+                                deviationsToRemove.Add(stdDev);
+                            }
                         }
                     }
                 }

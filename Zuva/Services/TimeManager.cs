@@ -3,12 +3,13 @@ using Zuva.Models;
 using System.Collections.Generic;
 using System;
 using Zuva.Extensions;
+using FibonacciLevel = Zuva.Models.FibonacciLevel;
 
 namespace Zuva.Services
 {
     /// <summary>
     /// Manages time-related functionality, including ICT macro time periods, 
-    /// daily high/low levels, and session high/low levels
+    /// daily high/low levels, session high/low levels, and Fibonacci levels
     /// </summary>
     public class TimeManager
     {
@@ -18,6 +19,10 @@ namespace Zuva.Services
         private readonly int _utcOffset;
         private readonly Bars _bars;
         private readonly SwingPointDetector _swingPointDetector;
+        
+        // Fibonacci-related fields
+        private readonly List<FibonacciLevel> _fibonacciLevels = new List<FibonacciLevel>();
+        private readonly bool _showFibLevels;
 
         // Keep track of which macro times we've already drawn lines for to avoid duplication
         private readonly HashSet<string> _drawnMacroTimes = new HashSet<string>();
@@ -37,14 +42,16 @@ namespace Zuva.Services
         /// Creates a new instance of the TimeManager
         /// </summary>
         public TimeManager(
-            Chart chart,
+            Chart chart, 
             Bars bars,
             SwingPointDetector swingPointDetector,
             bool showMacros = true,
+            bool showFibLevels = false,
             int utcOffset = -4)
         {
             _chart = chart;
             _showMacros = showMacros;
+            _showFibLevels = showFibLevels;
             _utcOffset = utcOffset;
             _macros = InitializeMacros();
             _bars = bars;
@@ -148,7 +155,7 @@ namespace Zuva.Services
             );
         }
 
-// Helper method to get a label from liquidity type
+        // Helper method to get a label from liquidity type
         private string GetLiquidityLabel(SwingPoint sweptPoint)
         {
             // Use the LiquidityName directly as it's already the short code we want
@@ -373,7 +380,7 @@ namespace Zuva.Services
                         SwingType.H,
                         LiquidityType.PDH,
                         Direction.Up,
-                        "PDH",
+                        LiquidityName.PDH,
                         dayEnd);
 
                     CreateOrUpdateSpecialSwingPoint(
@@ -384,8 +391,21 @@ namespace Zuva.Services
                         SwingType.L,
                         LiquidityType.PDL,
                         Direction.Down,
-                        "PDL",
+                        LiquidityName.PDL,
                         dayEnd);
+                        
+                    // Clean up Fibonacci levels from previous day if they exist
+                    if (_showFibLevels)
+                    {
+                        // Remove Fibonacci visuals from chart but keep sweep lines
+                        foreach (var fib in _fibonacciLevels)
+                        {
+                            RemoveFibonacciFromChart(fib);
+                        }
+                        
+                        // Explicitly clear the collection at day boundary
+                        _fibonacciLevels.Clear();
+                    }
                 }
 
                 // Update the last day start time
@@ -413,74 +433,52 @@ namespace Zuva.Services
             var highCandle = new Candle(_bars[tracker.HighIndex], tracker.HighIndex);
             var lowCandle = new Candle(_bars[tracker.LowIndex], tracker.LowIndex);
 
-            // Map session type to LiquidityType
-            LiquidityType highLiquidityType;
-            LiquidityType lowLiquidityType;
-            string highLabel;
-            string lowLabel;
+            // Map session type to LiquidityName
+            LiquidityName highLiquidityName;
+            LiquidityName lowLiquidityName;
 
-            // Set appropriate liquidity types and labels based on session
+            // Set appropriate liquidity names based on session
             switch (session)
             {
                 case SessionType.Asia:
-                    highLiquidityType = LiquidityType.PSH;
-                    lowLiquidityType = LiquidityType.PSL;
-                    highLabel = "AH"; // Asian Session High
-                    lowLabel = "AL"; // Asian Session Low
+                    highLiquidityName = LiquidityName.AH;
+                    lowLiquidityName = LiquidityName.AL;
                     break;
                 case SessionType.LondonPre:
-                    highLiquidityType = LiquidityType.PSH;
-                    lowLiquidityType = LiquidityType.PSL;
-                    highLabel = "LPH"; // London Pre-Session High
-                    lowLabel = "LPL"; // London Pre-Session Low
+                    highLiquidityName = LiquidityName.LPH;
+                    lowLiquidityName = LiquidityName.LPL;
                     break;
                 case SessionType.London:
-                    highLiquidityType = LiquidityType.PSH;
-                    lowLiquidityType = LiquidityType.PSL;
-                    highLabel = "LH"; // London Session High
-                    lowLabel = "LL"; // London Session Low
+                    highLiquidityName = LiquidityName.LH;
+                    lowLiquidityName = LiquidityName.LL;
                     break;
                 case SessionType.LondonLunch:
-                    highLiquidityType = LiquidityType.PSH;
-                    lowLiquidityType = LiquidityType.PSL;
-                    highLabel = "LLH"; // London Lunch Session High
-                    lowLabel = "LLL"; // London Lunch Session Low
+                    highLiquidityName = LiquidityName.LLH;
+                    lowLiquidityName = LiquidityName.LLL;
                     break;
                 case SessionType.NewYorkPre:
-                    highLiquidityType = LiquidityType.PSH;
-                    lowLiquidityType = LiquidityType.PSL;
-                    highLabel = "NYPH"; // NY Pre-Session High
-                    lowLabel = "NYPL"; // NY Pre-Session Low
+                    highLiquidityName = LiquidityName.NYPH;
+                    lowLiquidityName = LiquidityName.NYPL;
                     break;
                 case SessionType.NewYorkAM:
-                    highLiquidityType = LiquidityType.PSH;
-                    lowLiquidityType = LiquidityType.PSL;
-                    highLabel = "NYAMH"; // NY AM Session High
-                    lowLabel = "NYAML"; // NY AM Session Low
+                    highLiquidityName = LiquidityName.NYAMH;
+                    lowLiquidityName = LiquidityName.NYAML;
                     break;
                 case SessionType.NewYorkLunch:
-                    highLiquidityType = LiquidityType.PSH;
-                    lowLiquidityType = LiquidityType.PSL;
-                    highLabel = "NYLH"; // NY Lunch Session High
-                    lowLabel = "NYLL"; // NY Lunch Session Low
+                    highLiquidityName = LiquidityName.NYLH;
+                    lowLiquidityName = LiquidityName.NYLL;
                     break;
                 case SessionType.NewYorkPMPre:
-                    highLiquidityType = LiquidityType.PSH;
-                    lowLiquidityType = LiquidityType.PSL;
-                    highLabel = "NYPPH"; // NY PM Pre-Session High
-                    lowLabel = "NYPPL"; // NY PM Pre-Session Low
+                    highLiquidityName = LiquidityName.NYPPH;
+                    lowLiquidityName = LiquidityName.NYPPL;
                     break;
                 case SessionType.NewYorkPM:
-                    highLiquidityType = LiquidityType.PSH;
-                    lowLiquidityType = LiquidityType.PSL;
-                    highLabel = "NYPMH"; // NY PM Session High
-                    lowLabel = "NYPML"; // NY PM Session Low
+                    highLiquidityName = LiquidityName.NYPMH;
+                    lowLiquidityName = LiquidityName.NYPML;
                     break;
                 default:
-                    highLiquidityType = LiquidityType.PSH;
-                    lowLiquidityType = LiquidityType.PSL;
-                    highLabel = "SH"; // Generic Session High
-                    lowLabel = "SL"; // Generic Session Low
+                    highLiquidityName = LiquidityName.N;
+                    lowLiquidityName = LiquidityName.N;
                     break;
             }
 
@@ -491,9 +489,9 @@ namespace Zuva.Services
                 tracker.HighTime,
                 highCandle,
                 SwingType.HH,
-                highLiquidityType,
+                LiquidityType.PSH,
                 Direction.Up,
-                highLabel,
+                highLiquidityName,
                 tracker.EndTime);
 
             CreateOrUpdateSpecialSwingPoint(
@@ -502,10 +500,16 @@ namespace Zuva.Services
                 tracker.LowTime,
                 lowCandle,
                 SwingType.LL,
-                lowLiquidityType,
+                LiquidityType.PSL,
                 Direction.Down,
-                lowLabel,
+                lowLiquidityName,
                 tracker.EndTime);
+                
+            // Calculate Fibonacci levels for this session if enabled
+            if (_showFibLevels)
+            {
+                CalculateFibonacciLevels(tracker, session);
+            }
 
             // Reset the tracker for the next occurrence of this session
             _sessionTrackers[session] = new SessionTracker();
@@ -515,81 +519,77 @@ namespace Zuva.Services
         /// Creates a new swing point or updates an existing one at the same index
         /// </summary>
         private void CreateOrUpdateSpecialSwingPoint(
-    int index,
-    double price,
-    DateTime time,
-    Candle candle,
-    SwingType swingType,
-    LiquidityType liquidityType,
-    Direction direction,
-    string label,
-    DateTime endTime)
-{
-    if (_swingPointDetector == null)
-        return;
-
-    // Convert string label to LiquidityName enum
-    if (!Enum.TryParse(label, out LiquidityName liquidityName))
-        liquidityName = LiquidityName.N; // Default to Normal if parse fails
-
-    // Check if a swing point already exists at this index
-    var existingPoint = _swingPointDetector.GetSwingPointAtIndex(index);
-
-    if (existingPoint != null)
-    {
-        // If we're applying a PDH or PDL label and the existing point is not already a daily marker,
-        // then we need to clean up any existing session labels
-        if ((liquidityType == LiquidityType.PDH || liquidityType == LiquidityType.PDL) &&
-            existingPoint.LiquidityType != LiquidityType.PDH &&
-            existingPoint.LiquidityType != LiquidityType.PDL)
+            int index,
+            double price,
+            DateTime time,
+            Candle candle,
+            SwingType swingType,
+            LiquidityType liquidityType,
+            Direction direction,
+            LiquidityName liquidityName,
+            DateTime endTime)
         {
-            // Remove existing session lines and labels before updating to daily
-            RemoveExistingSessionLabels(time, price);
+            if (_swingPointDetector == null)
+                return;
+
+            // Check if a swing point already exists at this index
+            var existingPoint = _swingPointDetector.GetSwingPointAtIndex(index);
+
+            if (existingPoint != null)
+            {
+                // If we're applying a PDH or PDL label and the existing point is not already a daily marker,
+                // then we need to clean up any existing session labels
+                if ((liquidityType == LiquidityType.PDH || liquidityType == LiquidityType.PDL) &&
+                    existingPoint.LiquidityType != LiquidityType.PDH &&
+                    existingPoint.LiquidityType != LiquidityType.PDL)
+                {
+                    // Remove existing session lines and labels before updating to daily
+                    RemoveExistingSessionLabels(time, price);
+                }
+
+                // Update the existing swing point with the new liquidity type and name
+                existingPoint.LiquidityType = liquidityType;
+                existingPoint.LiquidityName = liquidityName;
+            }
+            else
+            {
+                // Create a new swing point with both liquidity type and name
+                var swingPoint = new SwingPoint(
+                    index,
+                    price,
+                    time,
+                    candle,
+                    swingType,
+                    liquidityType,
+                    direction,
+                    liquidityName
+                );
+
+                // Add to the swing detector
+                _swingPointDetector.AddSpecialSwingPoint(swingPoint);
+            }
+
+            // Draw the level line regardless of whether we created or updated the swing point
+            if (_chart != null)
+            {
+                string id = $"{liquidityName.ToString().ToLower()}-{time.Ticks}";
+
+                _chart.DrawStraightLine(
+                    id,
+                    time,
+                    price,
+                    endTime,
+                    price,
+                    liquidityName.ToString(),
+                    LineStyle.Solid,
+                    Color.Wheat,
+                    true, // Show label
+                    true // Remove existing
+                );
+            }
         }
 
-        // Update the existing swing point with the new liquidity type and name
-        existingPoint.LiquidityType = liquidityType;
-        existingPoint.LiquidityName = liquidityName;
-    }
-    else
-    {
-        // Create a new swing point with both liquidity type and name
-        var swingPoint = new SwingPoint(
-            index,
-            price,
-            time,
-            candle,
-            swingType,
-            liquidityType,
-            direction,
-            liquidityName  // Pass the liquidity name to the constructor
-        );
-
-        // Add to the swing detector
-        _swingPointDetector.AddSpecialSwingPoint(swingPoint);
-    }
-
-    // Draw the level line regardless of whether we created or updated the swing point
-    if (_chart != null)
-    {
-        string id = $"{label.ToLower()}-{time.Ticks}";
-
-        _chart.DrawStraightLine(
-            id,
-            time,
-            price,
-            endTime,
-            price,
-            label,
-            LineStyle.Solid,
-            Color.Wheat,
-            true, // Show label
-            true // Remove existing
-        );
-    }
-}
-
-// Helper method to remove all possible session labels at a given time and price
+        // Helper method to remove all possible session labels at a given time and price
         private void RemoveExistingSessionLabels(DateTime time, double price)
         {
             if (_chart == null)
@@ -639,6 +639,303 @@ namespace Zuva.Services
         public List<TimeRange> GetMacros()
         {
             return _macros;
+        }
+        
+        //////////////////////////////////
+        // Fibonacci-related functionality
+        //////////////////////////////////
+        
+        /// <summary>
+        /// Draw Fibonacci levels on the chart
+        /// </summary>
+        private void DrawFibonacciLevels(FibonacciLevel fib)
+        {
+            if (_chart == null)
+                return;
+            
+            // Create a unique ID for this Fibonacci object
+            string id = $"fib-{fib.SessionType}-{fib.StartTime.Ticks}";
+            
+            // Remove any existing Fibonacci object with this ID
+            _chart.RemoveObject(id);
+            
+            // Get range for calculation (always high - low)
+            double range = fib.HighPrice - fib.LowPrice;
+            
+            // Draw level lines for Fibonacci ratios we're tracking in ascending order
+            double[] levels = { -2.0, -1.5, -1.0, -0.5, -0.25, 0.0, 0.114, 0.886, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0 };
+            
+            foreach (double ratio in levels)
+            {
+                // Calculate price at this ratio - always ascending with ratio
+                double levelPrice = fib.LowPrice + (ratio * range);
+                
+                // Draw the level line
+                var line = _chart.DrawTrendLine(
+                    $"{id}-level-{ratio}",
+                    fib.StartTime,
+                    levelPrice,
+                    fib.EndTime.AddHours(8), // Extend for visibility
+                    levelPrice,
+                    Color.Pink
+                );
+                
+                // Make it semi-transparent
+                line.Color = Color.FromArgb(50, line.Color);
+                
+                // Make it editable
+                line.IsInteractive = true;
+                
+                // Add level label with the ratio (e.g., -2.0, 0.5, 1.0, etc.)
+                var label = _chart.DrawText(
+                    $"{id}-label-{ratio}",
+                    $"{ratio:0.###}",
+                    fib.StartTime,
+                    levelPrice,
+                    Color.Pink
+                );
+                
+                // Make label semi-transparent too
+                label.Color = Color.FromArgb(50, label.Color);
+            }
+            
+            // Store the ID for later cleanup
+            fib.FibonacciId = id;
+        }
+        
+        /// <summary>
+        /// Calculate Fibonacci levels for a session
+        /// </summary>
+        private void CalculateFibonacciLevels(SessionTracker tracker, SessionType session)
+        {
+            // Skip if we don't have valid data
+            if (tracker.HighIndex < 0 || tracker.LowIndex < 0)
+                return;
+                
+            // Determine chronological order for drawing (left to right)
+            int startIndex, endIndex;
+            DateTime startTime, endTime;
+            
+            if (tracker.HighIndex < tracker.LowIndex)
+            {
+                // High came first, then low
+                startIndex = tracker.HighIndex;
+                endIndex = tracker.LowIndex;
+                startTime = tracker.HighTime;
+                endTime = tracker.LowTime;
+            }
+            else
+            {
+                // Low came first, then high
+                startIndex = tracker.LowIndex;
+                endIndex = tracker.HighIndex;
+                startTime = tracker.LowTime;
+                endTime = tracker.HighTime;
+            }
+            
+            // Create the Fibonacci level object (pass chronological order for drawing,
+            // and it will calculate levels from low to high internally)
+            var fibLevel = new FibonacciLevel(
+                startIndex,
+                endIndex,
+                tracker.High, // Pass high price value
+                tracker.Low,  // Pass low price value
+                startTime,
+                endTime,
+                session
+            );
+            
+            // Add to our collection
+            _fibonacciLevels.Add(fibLevel);
+            
+            // Draw on chart
+            DrawFibonacciLevels(fibLevel);
+        }
+        
+        /// <summary>
+        /// Check if a swing point sweeps any Fibonacci levels
+        /// </summary>
+        public void CheckFibonacciSweep(SwingPoint swingPoint)
+        {
+            // Skip if not enabled or no data
+            if (!_showFibLevels || _fibonacciLevels.Count == 0 || swingPoint == null || swingPoint.Bar == null)
+                return;
+                
+            // Create a list of levels to remove (if all ratios are swept)
+            List<FibonacciLevel> levelsToRemove = new List<FibonacciLevel>();
+                
+            foreach (var fibLevel in _fibonacciLevels)
+            {
+                // Skip if this swing point is too old (created before the Fibonacci level)
+                if (swingPoint.Index <= fibLevel.EndIndex)
+                    continue;
+                    
+                // Check each ratio that we're tracking for sweeps
+                foreach (double ratio in FibonacciLevel.TrackedRatios)
+                {
+                    // Skip if this level has already been swept
+                    if (fibLevel.SweptLevels.ContainsKey(ratio) && fibLevel.SweptLevels[ratio])
+                        continue;
+                        
+                    // Get the price for this level - using consistent calculation
+                    double levelPrice = fibLevel.LowPrice + (ratio * (fibLevel.HighPrice - fibLevel.LowPrice));
+                    bool isSweep = false;
+                    
+                    // Determine if candle is bullish or bearish
+                    bool isBullishCandle = swingPoint.Bar.Close > swingPoint.Bar.Open;
+                    
+                    // Check for sweep based on direction
+                    if (swingPoint.Direction == Direction.Down) // Bearish swing point
+                    {
+                        if (isBullishCandle)
+                        {
+                            // Bearish swing point, bullish candle: Low <= level AND Open > level
+                            isSweep = swingPoint.Bar.Low <= levelPrice && swingPoint.Bar.Open > levelPrice;
+                        }
+                        else
+                        {
+                            // Bearish swing point, bearish candle: Low <= level AND Close > level
+                            isSweep = swingPoint.Bar.Low <= levelPrice && swingPoint.Bar.Close > levelPrice;
+                        }
+                    }
+                    else // Bullish swing point
+                    {
+                        if (isBullishCandle)
+                        {
+                            // Bullish swing point, bullish candle: High >= level AND Close < level
+                            isSweep = swingPoint.Bar.High >= levelPrice && swingPoint.Bar.Close < levelPrice;
+                        }
+                        else
+                        {
+                            // Bullish swing point, bearish candle: High >= level AND Open < level
+                            isSweep = swingPoint.Bar.High >= levelPrice && swingPoint.Bar.Open < levelPrice;
+                        }
+                    }
+                    
+                    if (isSweep)
+                    {
+                        // Mark this level as swept
+                        fibLevel.SweptLevels[ratio] = true;
+                        
+                        // Mark the swing point
+                        swingPoint.SweptFib = true;
+                        swingPoint.SweptFibLevel = fibLevel;
+                        
+                        // Set zone based on the ratio
+                        swingPoint.FibZone = fibLevel.GetZone(ratio);
+                        
+                        // Draw sweep line
+                        DrawFibSweepLine(swingPoint, fibLevel, ratio, levelPrice);
+                        
+                        // Check if all levels for this Fibonacci retracement are now swept
+                        if (fibLevel.AreAllLevelsSwept())
+                        {
+                            levelsToRemove.Add(fibLevel);
+                        }
+                        
+                        // We found a sweep, no need to check other levels
+                        break;
+                    }
+                }
+            }
+            
+            // Remove any fully swept levels
+            foreach (var level in levelsToRemove)
+            {
+                // Remove the chart visualization (but keep sweep lines)
+                if (_chart != null && !string.IsNullOrEmpty(level.FibonacciId))
+                {
+                    RemoveFibonacciFromChart(level);
+                }
+                
+                // Remove from our collection
+                _fibonacciLevels.Remove(level);
+            }
+        }
+        
+        /// <summary>
+        /// Draw a white line showing where a Fibonacci level was swept
+        /// </summary>
+        private void DrawFibSweepLine(SwingPoint swingPoint, FibonacciLevel fibLevel, double ratio, double level)
+        {
+            if (_chart == null)
+                return;
+                
+            // Create a unique ID for this sweep line
+            string id = $"fib-sweep-{fibLevel.SessionType}-{ratio}-{swingPoint.Time.Ticks}";
+            
+            // Remove any existing line
+            _chart.RemoveObject(id);
+            
+            // Calculate 2 minutes before and after the swing point
+            DateTime startTime = swingPoint.Time.AddMinutes(-1);
+            DateTime endTime = swingPoint.Time.AddMinutes(1);
+            
+            // Draw a white horizontal line at the level price
+            var line = _chart.DrawTrendLine(
+                id,
+                startTime,
+                level,
+                endTime,
+                level,
+                Color.White,
+                1,
+                LineStyle.Solid
+            );
+            
+            // Store the line ID for cleanup
+            if (!fibLevel.SweptLevelLineIds.ContainsKey(ratio))
+            {
+                fibLevel.SweptLevelLineIds[ratio] = id;
+            }
+        }
+        
+        /// <summary>
+        /// Remove a single Fibonacci level from the chart
+        /// </summary>
+        private void RemoveFibonacciFromChart(FibonacciLevel fib)
+        {
+            if (_chart == null || string.IsNullOrEmpty(fib.FibonacciId))
+                return;
+                
+            string baseId = fib.FibonacciId;
+            
+            // Remove main trend line
+            _chart.RemoveObject($"{baseId}-main");
+            
+            // Remove all level lines and labels
+            double[] levels = { -2.0, -1.5, -1.0, -0.5, -0.25, 0.0, 0.114, 0.886, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0 };
+            foreach (double level in levels)
+            {
+                _chart.RemoveObject($"{baseId}-level-{level}");
+                _chart.RemoveObject($"{baseId}-label-{level}");
+            }
+            
+            // DO NOT remove sweep lines - we want to keep these even after the Fibonacci level is removed
+            // This ensures traders can still see where levels were swept
+            // The sweep lines are:
+            // fib-sweep-{SessionType}-{ratio}-{TimeStamp}
+        }
+        
+        /// <summary>
+        /// Clean up all Fibonacci levels from the chart
+        /// </summary>
+        private void CleanupFibonacciLevels()
+        {
+            if (_chart == null)
+                return;
+                
+            // Remove all Fibonacci visualization objects EXCEPT the sweep level lines
+            foreach (var fib in _fibonacciLevels)
+            {
+                RemoveFibonacciFromChart(fib);
+                
+                // Important: Do NOT remove swept level lines as these should persist
+                // even after the Fibonacci level is removed
+            }
+            
+            // Clear the collection
+            _fibonacciLevels.Clear();
         }
     }
 }

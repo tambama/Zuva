@@ -10,10 +10,10 @@ namespace Zuva
     [Indicator(IsOverlay = true, TimeZone = TimeZones.UTC, AccessRights = AccessRights.None)]
     public class Zuva : Indicator
     {
-        [Parameter("Show Swing Points", DefaultValue = true)]
+        [Parameter("Swing Points", DefaultValue = true)]
         public bool ShowSwingPoints { get; set; }
 
-        [Parameter("Show HTF Swing Points", DefaultValue = false)]
+        [Parameter("HTF Swing Points", DefaultValue = false)]
         public bool ShowHtfSwingPoints { get; set; }
 
         [Parameter("HTF", DefaultValue = "H1")]
@@ -21,45 +21,47 @@ namespace Zuva
         [Parameter("UTC Offset", Group = "Time Management", DefaultValue = -4)]
         public int UtcOffset { get; set; }
         
-        [Parameter("Show Macro Times", Group = "Time Management", DefaultValue = true)]
+        [Parameter("Macro Times", Group = "Time Management", DefaultValue = true)]
         public bool ShowMacros { get; set; }
 
-        [Parameter("Show Market Structure", Group = "Market Structure", DefaultValue = true)]
+        [Parameter("Market Structure", Group = "Market Structure", DefaultValue = true)]
         public bool ShowMarketStructure { get; set; }
 
-        [Parameter("Show Structure", Group = "Market Structure", DefaultValue = true)]
+        [Parameter("Structure", Group = "Market Structure", DefaultValue = true)]
         public bool ShowStructure { get; set; }
 
-        [Parameter("Show CHOCH", Group = "Market Structure", DefaultValue = true)]
+        [Parameter("CHOCH", Group = "Market Structure", DefaultValue = true)]
         public bool ShowChoch { get; set; }
-        [Parameter("Show CISD", Group = "Market Structure", DefaultValue = false)]
+        [Parameter("CISD", Group = "Market Structure", DefaultValue = false)]
         public bool ShowCISD { get; set; }
         [Parameter("Max CISD", Group = "Market Structure", DefaultValue = 2)]
         public int MaxCisdsPerDirection { get; set; }
 
-        [Parameter("Show Order Flow", Group = "PD Arrays", DefaultValue = false)]
+        [Parameter("Order Flow", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowOrderFlow { get; set; }
         
-        [Parameter("Show Fair Value Gaps", Group = "PD Arrays", DefaultValue = true)]
+        [Parameter("Fair Value Gaps", Group = "PD Arrays", DefaultValue = true)]
         public bool ShowFVG { get; set; }
         
-        [Parameter("Show Order Blocks", Group = "PD Arrays", DefaultValue = true)]
+        [Parameter("Order Blocks", Group = "PD Arrays", DefaultValue = true)]
         public bool ShowOrderBlock { get; set; }
-        [Parameter("Show Breaker Blocks", Group = "PD Arrays", DefaultValue = false)]
+        [Parameter("Breaker Blocks", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowBreakerBlock { get; set; }
 
-        [Parameter("Show Unicorn", Group = "PD Arrays", DefaultValue = true)]
+        [Parameter("Unicorn", Group = "PD Arrays", DefaultValue = true)]
         public bool ShowUnicorn { get; set; }
-        [Parameter("Show Gauntlets", Group = "PD Arrays", DefaultValue = false)]
+        [Parameter("Gauntlets", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowGauntlet { get; set; }
-        [Parameter("Show Quadrants", Group = "PD Arrays", DefaultValue = false)]
+        [Parameter("Quadrants", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowQuadrants { get; set; }
-        [Parameter("Show Inside Key Level", Group = "PD Arrays", DefaultValue = false)]
+        [Parameter("Inside Key Level", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowInsideKeyLevel { get; set; }
-        [Parameter("Show Liquidity Sweeps", Group = "Liquidity", DefaultValue = true)]
+        [Parameter("Liquidity Sweeps", Group = "Liquidity", DefaultValue = true)]
         public bool ShowLiquiditySweep { get; set; }
-        [Parameter("Show STDv", Group = "Liquidity", DefaultValue = true)]
+        [Parameter("STDV", Group = "Liquidity", DefaultValue = true)]
         public bool ShowStdv { get; set; }
+        [Parameter("Session Fib", Group = "Liquidity", DefaultValue = false)]
+        public bool ShowFibonacciLevels { get; set; }
 
         [Output("Swing High", Color = Colors.White, PlotType = PlotType.Points, Thickness = 1)]
         public IndicatorDataSeries SwingHighs { get; set; }
@@ -143,6 +145,7 @@ namespace Zuva
                     Bars,
                     _swingDetector,
                     ShowMacros, 
+                    ShowFibonacciLevels,
                     UtcOffset);
             }
             catch (Exception ex)
@@ -299,6 +302,11 @@ namespace Zuva
                             if (swingPoint.Bar != null && _swingDetector != null)
                             {
                                 _swingDetector.CheckForSweptLiquidity(swingPoint.Bar, swingPoint.Index);
+                            }
+                            
+                            if (_timeManager != null)
+                            {
+                                _timeManager.CheckFibonacciSweep(swingPoint);
                             }
                             
                             // Process for PD Array analysis

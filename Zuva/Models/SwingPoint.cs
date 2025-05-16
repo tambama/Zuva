@@ -55,6 +55,11 @@ public class SwingPoint
     public StandardDeviation SweptDeviation { get; set; }
     public bool SweptMinusTwo { get; set; }  // To track which level was swept (MinusTwo or MinusFour)
     
+    // Fibonacci-related properties
+    public bool SweptFib { get; set; }
+    public Zone FibZone { get; set; } = Zone.Equilibrium;
+    public FibonacciLevel SweptFibLevel { get; set; }
+    
     // Score
     public int Score
     {
@@ -76,6 +81,9 @@ public class SwingPoint
             
             if (ActivatedUnicorn)
                 score += 3;
+            
+            if (SweptFib)
+                score += 1;
             
             return score;
         }
