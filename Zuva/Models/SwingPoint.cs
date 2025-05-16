@@ -60,6 +60,11 @@ public class SwingPoint
     public Zone FibZone { get; set; } = Zone.Equilibrium;
     public FibonacciLevel SweptFibLevel { get; set; }
     
+    // SMT
+    public double SMTValue { get; set; }
+    public bool HasSMT { get; set; }
+    public SwingPoint SMTSource { get; set; }
+    
     // Score
     public int Score
     {

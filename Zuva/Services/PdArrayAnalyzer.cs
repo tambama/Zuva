@@ -56,6 +56,12 @@ namespace Zuva.Services
         // Unicorns
         private readonly List<Level> _unicorns = new List<Level>();
         private readonly bool _showUnicorn;
+        
+        // SMT
+        private readonly bool _showSMT;
+        private readonly string _smtPair;
+        public delegate double PairDataProviderDelegate(string pairSymbol, DateTime time, int index, Direction direction);
+        public PairDataProviderDelegate PairDataProvider { get; set; }
 
         // Collection to store all gauntlet levels
         private readonly List<Level> _gauntlets = new List<Level>();
@@ -84,6 +90,8 @@ namespace Zuva.Services
             bool showInsideKeyLevel = false,
             int maxCisdsPerDirection = 2,
             SwingPointDetector swingPointDetector = null,
+            bool showSMT = false,
+            string smtPair = "",
             Action<string> logger = null)
         {
             _chart = chart;
@@ -100,6 +108,8 @@ namespace Zuva.Services
             _showInsideKeyLevel = showInsideKeyLevel;
             _maxCisdsPerDirection = maxCisdsPerDirection;
             _swingPointDetector = swingPointDetector;
+            _showSMT = showSMT;
+            _smtPair = smtPair;
             _logger = logger ?? (_ => { });
         }
 
@@ -692,6 +702,17 @@ namespace Zuva.Services
                     recentSwingHigh.Index, // IndexHigh is the recent swing high index
                     previousSwingLow.Index // IndexLow is the previous swing low index
                 );
+                
+                // For bullish orderflow, set SMT value only for the swing high
+                if (_showSMT && !string.IsNullOrEmpty(_smtPair))
+                {
+                    // Get the pair's HIGH price at the time of the swing high
+                    double pairPrice = GetPairPriceAtIndex(recentSwingHigh.Index, Direction.Up);
+                    if (pairPrice > 0)
+                    {
+                        recentSwingHigh.SMTValue = pairPrice;
+                    }
+                }
 
                 InitializeQuadrants(bullishOrderFlow);
 
@@ -765,6 +786,17 @@ namespace Zuva.Services
                     previousSwingHigh.Index, // IndexHigh is the previous swing high index
                     recentSwingLow.Index // IndexLow is the recent swing low index
                 );
+                
+                // For bearish orderflow, set SMT value only for the swing low
+                if (_showSMT && !string.IsNullOrEmpty(_smtPair))
+                {
+                    // Get the pair's LOW price at the time of the swing low
+                    double pairPrice = GetPairPriceAtIndex(recentSwingLow.Index, Direction.Down);
+                    if (pairPrice > 0)
+                    {
+                        recentSwingLow.SMTValue = pairPrice;
+                    }
+                }
 
                 InitializeQuadrants(bearishOrderFlow);
 
@@ -840,6 +872,27 @@ namespace Zuva.Services
                 orderflow.SweptSwingPoint = highestSweptPoint;
 
                 DetectCisdLevel(orderflow);
+                
+                // Check for SMT divergence if enabled
+                if (_showSMT && !string.IsNullOrEmpty(_smtPair))
+                {
+                    // Get the current swing point at sweeping candle index
+                    var sweepingSwingPoint = _swingPointDetector.GetSwingPointAtIndex(sweepingCandleIndex);
+            
+                    if (sweepingSwingPoint != null && highestSweptPoint != null)
+                    {
+                        // Check for SMT divergence when price makes new high but the pair makes a lower high
+                        if (sweepingSwingPoint.Price > highestSweptPoint.Price && 
+                            sweepingSwingPoint.SMTValue < highestSweptPoint.SMTValue)
+                        {
+                            sweepingSwingPoint.HasSMT = true;
+                            sweepingSwingPoint.SMTSource = highestSweptPoint;
+                    
+                            // Draw a dotted trendline connecting the points
+                            DrawSmtDivergence(highestSweptPoint, sweepingSwingPoint);
+                        }
+                    }
+                }
 
                 // Add score based on how many sweep points were triggered
                 // More points = higher score
@@ -896,6 +949,27 @@ namespace Zuva.Services
                 orderflow.SweptSwingPoint = lowestSweptPoint;
 
                 DetectCisdLevel(orderflow);
+                
+                // Check for SMT divergence if enabled
+                if (_showSMT && !string.IsNullOrEmpty(_smtPair))
+                {
+                    // Get the current swing point at sweeping candle index
+                    var sweepingSwingPoint = _swingPointDetector.GetSwingPointAtIndex(sweepingCandleIndex);
+            
+                    if (sweepingSwingPoint != null && lowestSweptPoint != null)
+                    {
+                        // Check for SMT divergence when price makes new low but the pair makes a higher low
+                        if (sweepingSwingPoint.Price < lowestSweptPoint.Price && 
+                            sweepingSwingPoint.SMTValue > lowestSweptPoint.SMTValue)
+                        {
+                            sweepingSwingPoint.HasSMT = true;
+                            sweepingSwingPoint.SMTSource = lowestSweptPoint;
+                    
+                            // Draw a dotted trendline connecting the points
+                            DrawSmtDivergence(lowestSweptPoint, sweepingSwingPoint);
+                        }
+                    }
+                }
 
                 // Add score based on how many sweep points were triggered
                 // More points = higher score
@@ -1763,6 +1837,90 @@ namespace Zuva.Services
                 unicornColor,
                 2, // Thicker line
                 LineStyle.Dots); // Solid line for Unicorns
+        }
+
+        #endregion
+
+        #region SMT
+
+        // Add to PdArrayAnalyzer.cs
+        private void DrawSmtDivergence(SwingPoint sweptPoint, SwingPoint sweepingPoint)
+        {
+            if (_chart == null || sweptPoint == null || sweepingPoint == null)
+                return;
+
+            // Create a unique ID for this SMT divergence line
+            string id = $"smt-{sweptPoint.Time.Ticks}-{sweepingPoint.Time.Ticks}";
+
+            // Draw a dotted trendline connecting the swept point to the sweeping point
+            _chart.DrawStraightLine(
+                id,
+                sweptPoint.Time,
+                sweptPoint.Price,
+                sweepingPoint.Time,
+                sweepingPoint.Price,
+                null, // Label it as SMT
+                LineStyle.Dots,
+                Color.FromArgb(60, Color.Yellow), // Use yellow color for visibility
+                false, // Show label
+                true, // Remove existing
+                false // Not extended
+            );
+    
+            // Draw an icon on the swing point with SMT divergence
+            _chart.DrawIcon($"smt-icon-{sweepingPoint.Time.Ticks}", ChartIconType.Star, 
+                sweepingPoint.Time, sweepingPoint.Price, Color.FromArgb(60, Color.Yellow));
+        }
+        
+        /// <summary>
+        /// Gets the price of the pair instrument at the given index
+        /// </summary>
+        /// <param name="index">The index to get the pair price for</param>
+        /// <returns>The price of the pair instrument, or 0 if not available</returns>
+        private double GetPairPriceAtIndex(int index, Direction direction)
+        {
+            try
+            {
+                // Skip if SMT is disabled or no pair is specified
+                if (!_showSMT || string.IsNullOrEmpty(_smtPair))
+                    return 0;
+            
+                // Check if we have a data provider
+                if (PairDataProvider == null)
+                {
+                    _logger?.Invoke($"No pair data provider available for {_smtPair}");
+                    return 0;
+                }
+        
+                // Use the data provider to get the pair price
+                var time = Bars[index].OpenTime;
+                double price = PairDataProvider(_smtPair, time, index, direction);
+        
+                // Log the retrieved price for debugging
+                if (price > 0)
+                {
+                    // do nothing
+                }
+                else
+                {
+                    _logger?.Invoke($"WARNING: Got zero pair price for {_smtPair} at index {index} for {direction}");
+                }
+        
+                return price;
+            }
+            catch (Exception ex)
+            {
+                _logger?.Invoke($"Error getting pair price for {_smtPair} at index {index}: {ex.Message}");
+                return 0;
+            }
+        }
+
+        // Add getter method for SMT divergence points
+        public List<SwingPoint> GetSMTDivergencePoints()
+        {
+            return _swingPointDetector?.GetAllSwingPoints()
+                .Where(sp => sp.HasSMT)
+                .ToList() ?? new List<SwingPoint>();
         }
 
         #endregion

@@ -4,6 +4,7 @@ using Zuva.Models;
 using System.Collections.Generic;
 using Zuva.Extensions;
 using System;
+using cAlgo.API.Internals;
 
 namespace Zuva
 {
@@ -18,9 +19,10 @@ namespace Zuva
 
         [Parameter("HTF", DefaultValue = "H1")]
         public string HTF { get; set; }
+
         [Parameter("UTC Offset", Group = "Time Management", DefaultValue = -4)]
         public int UtcOffset { get; set; }
-        
+
         [Parameter("Macro Times", Group = "Time Management", DefaultValue = true)]
         public bool ShowMacros { get; set; }
 
@@ -32,36 +34,51 @@ namespace Zuva
 
         [Parameter("CHOCH", Group = "Market Structure", DefaultValue = true)]
         public bool ShowChoch { get; set; }
+
         [Parameter("CISD", Group = "Market Structure", DefaultValue = false)]
         public bool ShowCISD { get; set; }
+
         [Parameter("Max CISD", Group = "Market Structure", DefaultValue = 2)]
         public int MaxCisdsPerDirection { get; set; }
 
         [Parameter("Order Flow", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowOrderFlow { get; set; }
-        
+
         [Parameter("Fair Value Gaps", Group = "PD Arrays", DefaultValue = true)]
         public bool ShowFVG { get; set; }
-        
+
         [Parameter("Order Blocks", Group = "PD Arrays", DefaultValue = true)]
         public bool ShowOrderBlock { get; set; }
+
         [Parameter("Breaker Blocks", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowBreakerBlock { get; set; }
 
         [Parameter("Unicorn", Group = "PD Arrays", DefaultValue = true)]
         public bool ShowUnicorn { get; set; }
+
         [Parameter("Gauntlets", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowGauntlet { get; set; }
+
         [Parameter("Quadrants", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowQuadrants { get; set; }
+
         [Parameter("Inside Key Level", Group = "PD Arrays", DefaultValue = false)]
         public bool ShowInsideKeyLevel { get; set; }
+
         [Parameter("Liquidity Sweeps", Group = "Liquidity", DefaultValue = true)]
         public bool ShowLiquiditySweep { get; set; }
+
         [Parameter("STDV", Group = "Liquidity", DefaultValue = true)]
         public bool ShowStdv { get; set; }
+
         [Parameter("Session Fib", Group = "Liquidity", DefaultValue = false)]
         public bool ShowFibonacciLevels { get; set; }
+
+        [Parameter("SMT", Group = "SMT", DefaultValue = false)]
+        public bool ShowSMT { get; set; }
+
+        [Parameter("Pair", Group = "SMT", DefaultValue = "")]
+        public string SMTPair { get; set; }
 
         [Output("Swing High", Color = Colors.White, PlotType = PlotType.Points, Thickness = 1)]
         public IndicatorDataSeries SwingHighs { get; set; }
@@ -101,9 +118,13 @@ namespace Zuva
 
         private Bar _currentBar;
         private int _currentBarIndex;
-        
+
         private Bar _previousBar;
         private int _previousBarIndex;
+
+        // SMT
+        private Symbol _pairSymbol;
+        private Bars _pairBars;
 
         // Market structure analyzer
         private MarketStructureAnalyzer _marketStructureAnalyzer;
@@ -124,27 +145,27 @@ namespace Zuva
         {
             // Delete all obk=jects from Chart
             Chart.RemoveAllObjects();
-            
+
             // Initialize the swing detector
             _swingPoints = new List<SwingPoint>();
             _htfSwingPoints = new List<SwingPoint>();
 
             _swingDetector = new SwingPointDetector(SwingHighs, SwingLows);
             _htfSwingDetector = new SwingPointDetector(HtfSwingHighs, HtfSwingLows);
-            
+
             // Wire up the SwingPointRemoved event
             _swingDetector.SwingPointRemoved += OnSwingPointRemoved;
             _htfSwingDetector.SwingPointRemoved += OnSwingPointRemoved;
 
             _highTimeFrame = HTF.GetTimeFrameFromString();
-            
+
             try
             {
                 _timeManager = new TimeManager(
-                    Chart, 
+                    Chart,
                     Bars,
                     _swingDetector,
-                    ShowMacros, 
+                    ShowMacros,
                     ShowFibonacciLevels,
                     UtcOffset);
             }
@@ -159,20 +180,22 @@ namespace Zuva
             try
             {
                 _pdArrayAnalyzer = new PdArrayAnalyzer(
-                    Chart, 
-                    Bars, 
-                    ShowOrderFlow, 
-                    ShowLiquiditySweep, 
+                    Chart,
+                    Bars,
+                    ShowOrderFlow,
+                    ShowLiquiditySweep,
                     ShowGauntlet,
-                    ShowFVG,                 // Pass ShowFVG directly
-                    ShowOrderBlock,          // Pass ShowOrderBlock directly
+                    ShowFVG, // Pass ShowFVG directly
+                    ShowOrderBlock, // Pass ShowOrderBlock directly
                     ShowCISD,
                     ShowBreakerBlock,
                     ShowUnicorn,
                     ShowQuadrants,
                     ShowInsideKeyLevel,
-                    MaxCisdsPerDirection, 
-                    _swingDetector,          // Pass swing detector for order block detection
+                    MaxCisdsPerDirection,
+                    _swingDetector, // Pass swing detector for order block detection
+                    ShowSMT,
+                    SMTPair,
                     message => Print(message));
             }
             catch (Exception ex)
@@ -184,6 +207,14 @@ namespace Zuva
                 ShowGauntlet = false;
                 ShowFVG = false;
                 ShowOrderBlock = false;
+            }
+
+            if (ShowSMT && !string.IsNullOrEmpty(SMTPair))
+            {
+                InitializePairSymbol();
+
+                // Then set the data provider - make sure we use the correct method
+                _pdArrayAnalyzer.PairDataProvider = GetPairPrice;
             }
 
             // Initialize market structure analyzer if enabled
@@ -222,7 +253,7 @@ namespace Zuva
             _currentBarIndex = index;
             _previousBar = Bars[index - 1];
             _previousBarIndex = index - 1;
-            
+
             // Process for macro time periods
             if (_timeManager != null)
             {
@@ -235,7 +266,7 @@ namespace Zuva
                     Print("Error in macro time processing: " + ex.Message);
                 }
             }
-            
+
             // Check for CISD activation on previous bar
             if (_pdArrayAnalyzer != null && index > 1)
             {
@@ -248,7 +279,7 @@ namespace Zuva
                     Print("Error in CISD activation check: " + ex.Message);
                 }
             }
-            
+
             // Process for FVG and Order Block detection (now using PdArrayAnalyzer)
             if (_pdArrayAnalyzer != null)
             {
@@ -298,17 +329,17 @@ namespace Zuva
                                     _marketStructureAnalyzer.ProcessSwingPoint(swingPoint);
                                 }
                             }
-                            
+
                             if (swingPoint.Bar != null && _swingDetector != null)
                             {
                                 _swingDetector.CheckForSweptLiquidity(swingPoint.Bar, swingPoint.Index);
                             }
-                            
+
                             if (_timeManager != null)
                             {
                                 _timeManager.CheckFibonacciSweep(swingPoint);
                             }
-                            
+
                             // Process for PD Array analysis
                             if (_pdArrayAnalyzer != null)
                             {
@@ -378,6 +409,122 @@ namespace Zuva
                 {
                     Print("Error in HTF processing: " + ex.Message);
                 }
+            }
+        }
+
+        private void InitializePairSymbol()
+        {
+            if (!ShowSMT || string.IsNullOrEmpty(SMTPair))
+                return;
+
+            try
+            {
+                _pairSymbol = Symbols.GetSymbol(SMTPair);
+                if (_pairSymbol != null)
+                {
+                    // Get the bars data for this symbol with the same timeframe
+                    _pairBars = MarketData.GetBars(TimeFrame, SMTPair);
+                }
+                else
+                {
+                    Print($"Symbol '{SMTPair}' not found. SMT functionality will be disabled.");
+                    ShowSMT = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Print($"Error initializing pair symbol: {ex.Message}");
+                // Disable SMT to prevent further errors
+                ShowSMT = false;
+            }
+        }
+
+        private double GetPairPrice(string pairSymbol, DateTime time, int index, Direction direction)
+        {
+            // If we don't have pair data, return 0
+            if (_pairSymbol == null || _pairBars == null)
+            {
+                Print($"No pair symbol or bars initialized for {pairSymbol}");
+                return 0;
+            }
+
+            if (_pairBars.Count == 0)
+            {
+                Print($"Pair bars collection is empty for {pairSymbol}");
+                return 0;
+            }
+
+            try
+            {
+                // Method 1: Try to find the bar at the exact same time
+                for (int i = 0; i < _pairBars.Count; i++)
+                {
+                    if (_pairBars[i].OpenTime == time)
+                    {
+                        // Return high for bullish, low for bearish
+                        if (direction == Direction.Up)
+                        {
+                            return _pairBars[i].High;
+                        }
+                        else
+                        {
+                            return _pairBars[i].Low;
+                        }
+                    }
+                }
+
+                // Method 2: If we can't find an exact time match, try to find the closest bar
+                int closestIndex = -1;
+                TimeSpan minTimeDiff = TimeSpan.MaxValue;
+
+                for (int i = 0; i < _pairBars.Count; i++)
+                {
+                    TimeSpan timeDiff = _pairBars[i].OpenTime > time
+                        ? _pairBars[i].OpenTime - time
+                        : time - _pairBars[i].OpenTime;
+
+                    if (timeDiff < minTimeDiff)
+                    {
+                        minTimeDiff = timeDiff;
+                        closestIndex = i;
+                    }
+                }
+
+                if (closestIndex >= 0)
+                {
+                    // Return high for bullish, low for bearish
+                    if (direction == Direction.Up)
+                    {
+                        return _pairBars[closestIndex].High;
+                    }
+                    else
+                    {
+                        return _pairBars[closestIndex].Low;
+                    }
+                }
+
+                // Method 3: If all else fails, try to use the same index if it's in range
+                if (index < _pairBars.Count)
+                {
+                    // Return high for bullish, low for bearish
+                    if (direction == Direction.Up)
+                    {
+                        return _pairBars[index].High;
+                    }
+                    else
+                    {
+                        return _pairBars[index].Low;
+                    }
+                }
+
+                Print($"Could not find matching bar for {pairSymbol} at time {time}");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Print($"Error getting pair price: {ex.Message}");
+                Print($"Stack trace: {ex.StackTrace}");
+                return 0;
             }
         }
 
@@ -452,39 +599,39 @@ namespace Zuva
         {
             return _pdArrayAnalyzer?.GetLastBearishPdArray();
         }
-        
+
         // Get FVG information - now using PdArrayAnalyzer
         public List<Level> GetAllFVGs()
         {
             return _pdArrayAnalyzer?.GetAllFVGs() ?? new List<Level>();
         }
-        
+
         public List<Level> GetBullishFVGs()
         {
             return _pdArrayAnalyzer?.GetBullishFVGs() ?? new List<Level>();
         }
-        
+
         public List<Level> GetBearishFVGs()
         {
             return _pdArrayAnalyzer?.GetBearishFVGs() ?? new List<Level>();
         }
-        
+
         // Get Order Block information - now using PdArrayAnalyzer
         public List<Level> GetAllOrderBlocks()
         {
             return _pdArrayAnalyzer?.GetAllOrderBlocks() ?? new List<Level>();
         }
-        
+
         public List<Level> GetBullishOrderBlocks()
         {
             return _pdArrayAnalyzer?.GetBullishOrderBlocks() ?? new List<Level>();
         }
-        
+
         public List<Level> GetBearishOrderBlocks()
         {
             return _pdArrayAnalyzer?.GetBearishOrderBlocks() ?? new List<Level>();
         }
-        
+
         // Get orderflow levels that swept liquidity
         public List<Level> GetLiquiditySweepLevels()
         {
@@ -494,14 +641,15 @@ namespace Zuva
         // Get all orderflow levels that swept multiple liquidity points
         public List<Level> GetMultipleSweptLevels()
         {
-            return _pdArrayAnalyzer?.GetPdArrays().Where(l => l.SweptSwingPoints?.Count > 1).ToList() ?? new List<Level>();
+            return _pdArrayAnalyzer?.GetPdArrays().Where(l => l.SweptSwingPoints?.Count > 1).ToList() ??
+                   new List<Level>();
         }
 
         // Get all swing points that had their liquidity swept
         public List<SwingPoint> GetSweptSwingPoints()
         {
             List<SwingPoint> sweptPoints = new List<SwingPoint>();
-    
+
             var levels = _pdArrayAnalyzer?.GetPdArrays();
             if (levels != null)
             {
@@ -513,22 +661,22 @@ namespace Zuva
                     }
                 }
             }
-    
+
             return sweptPoints;
         }
-        
+
         // Get all Gauntlets
         public List<Level> GetGauntlets()
         {
             return _pdArrayAnalyzer?.GetGauntlets() ?? new List<Level>();
         }
-        
+
         // Get Gauntlets by direction
         public List<Level> GetGauntlets(Direction direction)
         {
             return _pdArrayAnalyzer?.GetGauntlets(direction) ?? new List<Level>();
         }
-        
+
         // Get the most recent Gauntlet by direction
         public Level GetLastGauntlet(Direction direction)
         {
@@ -536,14 +684,14 @@ namespace Zuva
                 .OrderByDescending(g => g.Index)
                 .FirstOrDefault();
         }
-        
+
         // Add this method to handle swing point removal events
         private void OnSwingPointRemoved(SwingPoint removedPoint)
         {
             // Skip if the PD Array analyzer isn't initialized yet
             if (!_pdArrayAnalyzerInitialized || _pdArrayAnalyzer == null)
                 return;
-        
+
             try
             {
                 // Notify the PD Array analyzer about the removed swing point
@@ -555,7 +703,7 @@ namespace Zuva
                 Print($"Error handling swing point removal: {ex.Message}");
             }
         }
-        
+
         public List<Level> GetAllCISDLevels()
         {
             return _pdArrayAnalyzer?.GetAllCISDLevels() ?? new List<Level>();
@@ -570,7 +718,7 @@ namespace Zuva
         {
             return _pdArrayAnalyzer?.GetConfirmedCISDLevels() ?? new List<Level>();
         }
-        
+
         public bool IsInMacroTime(DateTime time)
         {
             return _timeManager?.IsInMacroTime(time) ?? false;
@@ -580,7 +728,7 @@ namespace Zuva
         {
             return _timeManager?.GetMacros() ?? new List<TimeRange>();
         }
-        
+
         public List<Level> GetAllBreakerBlocks()
         {
             return _pdArrayAnalyzer?.GetAllBreakerBlocks() ?? new List<Level>();
@@ -595,7 +743,7 @@ namespace Zuva
         {
             return _pdArrayAnalyzer?.GetBearishBreakerBlocks() ?? new List<Level>();
         }
-        
+
         public List<Level> GetAllUnicorns()
         {
             return _pdArrayAnalyzer?.GetAllUnicorns() ?? new List<Level>();
@@ -610,7 +758,7 @@ namespace Zuva
         {
             return _pdArrayAnalyzer?.GetLastUnicorn(direction);
         }
-        
+
         // Add these public methods to expose active PD Array information
         public List<Level> GetActivePdArrays()
         {
@@ -643,6 +791,17 @@ namespace Zuva
         public List<SwingPoint> GetSwingPointsThatSweptQuadrants()
         {
             return _swingPoints?.Where(sp => sp.InsideKeyLevel).ToList() ?? new List<SwingPoint>();
+        }
+
+        // Get SMT divergence points
+        public List<SwingPoint> GetSMTDivergencePoints()
+        {
+            if (!ShowSMT || _swingDetector == null)
+                return new List<SwingPoint>();
+
+            return _swingDetector.GetAllSwingPoints()
+                .Where(sp => sp.HasSMT)
+                .ToList();
         }
     }
 }
