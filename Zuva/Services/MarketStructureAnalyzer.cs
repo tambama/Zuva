@@ -1146,11 +1146,13 @@ namespace Zuva.Services
             // Get the standard deviation level
             double level = isMinusTwo ? stdDev.MinusTwo : stdDev.MinusFour;
             Color color = isMinusTwo ? Color.Green : Color.Red;
+            
+            
 
             // Calculate start and end times (3 units centered on the sweeping candle)
             // Using 1 minute as the example timeframe unit
-            DateTime startTime = swingPoint.Time.AddMinutes(-2);
-            DateTime endTime = swingPoint.Time.AddMinutes(2);
+            DateTime startTime = swingPoint.Time.AddMinutes(-1);
+            DateTime endTime = swingPoint.Time.AddMinutes(1);
 
             // Draw a horizontal line at the level centered on the sweeping candle
             _chart.DrawTrendLine(
@@ -1159,7 +1161,7 @@ namespace Zuva.Services
                 level,
                 endTime,
                 level,
-                color,
+                Color.FromArgb(80, color),
                 1,
                 LineStyle.Solid
             );
