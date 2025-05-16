@@ -19,7 +19,7 @@ namespace Zuva.Services
         private readonly int _utcOffset;
         private readonly Bars _bars;
         private readonly SwingPointDetector _swingPointDetector;
-        
+
         // Fibonacci-related fields
         private readonly List<FibonacciLevel> _fibonacciLevels = new List<FibonacciLevel>();
         private readonly bool _showFibLevels;
@@ -42,7 +42,7 @@ namespace Zuva.Services
         /// Creates a new instance of the TimeManager
         /// </summary>
         public TimeManager(
-            Chart chart, 
+            Chart chart,
             Bars bars,
             SwingPointDetector swingPointDetector,
             bool showMacros = true,
@@ -133,7 +133,7 @@ namespace Zuva.Services
 
             // Create unique IDs for the original and extended lines
             string originalLineId = $"{label.ToLower()}-{sweptPoint.Time.Ticks}";
-            string extendedLineId = 
+            string extendedLineId =
                 $"{label.ToLower()}-extended-{sweptPoint.Time.Ticks}-{sweepingCandle.Time.Ticks}";
 
             // Remove the original line
@@ -146,12 +146,12 @@ namespace Zuva.Services
                 sweptPoint.Price,
                 sweepingCandle.Time,
                 sweptPoint.Price,
-                label,  // Use the same label when extending
+                label, // Use the same label when extending
                 LineStyle.Solid,
                 Color.FromArgb(40, Color.Red),
                 true, // Show label
                 true, // Remove existing
-                labelOnRight:true
+                labelOnRight: true
             );
         }
 
@@ -393,7 +393,7 @@ namespace Zuva.Services
                         Direction.Down,
                         LiquidityName.PDL,
                         dayEnd);
-                        
+
                     // Clean up Fibonacci levels from previous day if they exist
                     if (_showFibLevels)
                     {
@@ -402,7 +402,7 @@ namespace Zuva.Services
                         {
                             RemoveFibonacciFromChart(fib);
                         }
-                        
+
                         // Explicitly clear the collection at day boundary
                         _fibonacciLevels.Clear();
                     }
@@ -504,7 +504,7 @@ namespace Zuva.Services
                 Direction.Down,
                 lowLiquidityName,
                 tracker.EndTime);
-                
+
             // Calculate Fibonacci levels for this session if enabled
             if (_showFibLevels)
             {
@@ -640,11 +640,11 @@ namespace Zuva.Services
         {
             return _macros;
         }
-        
+
         //////////////////////////////////
         // Fibonacci-related functionality
         //////////////////////////////////
-        
+
         /// <summary>
         /// Draw Fibonacci levels on the chart
         /// </summary>
@@ -652,24 +652,24 @@ namespace Zuva.Services
         {
             if (_chart == null)
                 return;
-            
+
             // Create a unique ID for this Fibonacci object
             string id = $"fib-{fib.SessionType}-{fib.StartTime.Ticks}";
-            
+
             // Remove any existing Fibonacci object with this ID
             _chart.RemoveObject(id);
-            
+
             // Get range for calculation (always high - low)
             double range = fib.HighPrice - fib.LowPrice;
-            
+
             // Draw level lines for Fibonacci ratios we're tracking in ascending order
             double[] levels = { -2.0, -1.5, -1.0, -0.5, -0.25, 0.0, 0.114, 0.886, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0 };
-            
+
             foreach (double ratio in levels)
             {
                 // Calculate price at this ratio - always ascending with ratio
                 double levelPrice = fib.LowPrice + (ratio * range);
-                
+
                 // Draw the level line
                 var line = _chart.DrawTrendLine(
                     $"{id}-level-{ratio}",
@@ -679,13 +679,13 @@ namespace Zuva.Services
                     levelPrice,
                     Color.Pink
                 );
-                
+
                 // Make it semi-transparent
                 line.Color = Color.FromArgb(50, line.Color);
-                
+
                 // Make it editable
                 line.IsInteractive = true;
-                
+
                 // Add level label with the ratio (e.g., -2.0, 0.5, 1.0, etc.)
                 var label = _chart.DrawText(
                     $"{id}-label-{ratio}",
@@ -694,15 +694,15 @@ namespace Zuva.Services
                     levelPrice,
                     Color.Pink
                 );
-                
+
                 // Make label semi-transparent too
                 label.Color = Color.FromArgb(50, label.Color);
             }
-            
+
             // Store the ID for later cleanup
             fib.FibonacciId = id;
         }
-        
+
         /// <summary>
         /// Calculate Fibonacci levels for a session
         /// </summary>
@@ -711,11 +711,11 @@ namespace Zuva.Services
             // Skip if we don't have valid data
             if (tracker.HighIndex < 0 || tracker.LowIndex < 0)
                 return;
-                
+
             // Determine chronological order for drawing (left to right)
             int startIndex, endIndex;
             DateTime startTime, endTime;
-            
+
             if (tracker.HighIndex < tracker.LowIndex)
             {
                 // High came first, then low
@@ -732,26 +732,26 @@ namespace Zuva.Services
                 startTime = tracker.LowTime;
                 endTime = tracker.HighTime;
             }
-            
+
             // Create the Fibonacci level object (pass chronological order for drawing,
             // and it will calculate levels from low to high internally)
             var fibLevel = new FibonacciLevel(
                 startIndex,
                 endIndex,
                 tracker.High, // Pass high price value
-                tracker.Low,  // Pass low price value
+                tracker.Low, // Pass low price value
                 startTime,
                 endTime,
                 session
             );
-            
+
             // Add to our collection
             _fibonacciLevels.Add(fibLevel);
-            
+
             // Draw on chart
             DrawFibonacciLevels(fibLevel);
         }
-        
+
         /// <summary>
         /// Check if a swing point sweeps any Fibonacci levels
         /// </summary>
@@ -760,30 +760,34 @@ namespace Zuva.Services
             // Skip if not enabled or no data
             if (!_showFibLevels || _fibonacciLevels.Count == 0 || swingPoint == null || swingPoint.Bar == null)
                 return;
-                
+
+            // Create a list to track all swept levels
+            List<(FibonacciLevel fibLevel, double ratio, double levelPrice)> sweptLevels =
+                new List<(FibonacciLevel, double, double)>();
+
             // Create a list of levels to remove (if all ratios are swept)
             List<FibonacciLevel> levelsToRemove = new List<FibonacciLevel>();
-                
+
             foreach (var fibLevel in _fibonacciLevels)
             {
                 // Skip if this swing point is too old (created before the Fibonacci level)
                 if (swingPoint.Index <= fibLevel.EndIndex)
                     continue;
-                    
+
                 // Check each ratio that we're tracking for sweeps
                 foreach (double ratio in FibonacciLevel.TrackedRatios)
                 {
                     // Skip if this level has already been swept
                     if (fibLevel.SweptLevels.ContainsKey(ratio) && fibLevel.SweptLevels[ratio])
                         continue;
-                        
+
                     // Get the price for this level - using consistent calculation
                     double levelPrice = fibLevel.LowPrice + (ratio * (fibLevel.HighPrice - fibLevel.LowPrice));
                     bool isSweep = false;
-                    
+
                     // Determine if candle is bullish or bearish
                     bool isBullishCandle = swingPoint.Bar.Close > swingPoint.Bar.Open;
-                    
+
                     // Check for sweep based on direction
                     if (swingPoint.Direction == Direction.Down) // Bearish swing point
                     {
@@ -811,34 +815,44 @@ namespace Zuva.Services
                             isSweep = swingPoint.Bar.High >= levelPrice && swingPoint.Bar.Open < levelPrice;
                         }
                     }
-                    
+
                     if (isSweep)
                     {
                         // Mark this level as swept
                         fibLevel.SweptLevels[ratio] = true;
-                        
+
+                        // Add to our collection of swept levels
+                        sweptLevels.Add((fibLevel, ratio, levelPrice));
+
                         // Mark the swing point
                         swingPoint.SweptFib = true;
                         swingPoint.SweptFibLevel = fibLevel;
-                        
+
                         // Set zone based on the ratio
                         swingPoint.FibZone = fibLevel.GetZone(ratio);
-                        
-                        // Draw sweep line
-                        DrawFibSweepLine(swingPoint, fibLevel, ratio, levelPrice);
-                        
+
                         // Check if all levels for this Fibonacci retracement are now swept
                         if (fibLevel.AreAllLevelsSwept())
                         {
                             levelsToRemove.Add(fibLevel);
                         }
-                        
-                        // We found a sweep, no need to check other levels
-                        break;
                     }
                 }
             }
-            
+
+            // After checking all levels, draw only the extreme one if any levels were swept
+            if (sweptLevels.Count > 0)
+            {
+                // Find the extreme level based on swing point direction
+                (FibonacciLevel extremeFib, double extremeRatio, double extremePrice) =
+                    swingPoint.Direction == Direction.Up
+                        ? sweptLevels.OrderByDescending(x => x.levelPrice).First() // For bullish, get highest
+                        : sweptLevels.OrderBy(x => x.levelPrice).First(); // For bearish, get lowest
+
+                // Draw only the extreme one
+                DrawFibSweepLine(swingPoint, extremeFib, extremeRatio, extremePrice);
+            }
+
             // Remove any fully swept levels
             foreach (var level in levelsToRemove)
             {
@@ -847,12 +861,12 @@ namespace Zuva.Services
                 {
                     RemoveFibonacciFromChart(level);
                 }
-                
+
                 // Remove from our collection
                 _fibonacciLevels.Remove(level);
             }
         }
-        
+
         /// <summary>
         /// Draw a white line showing where a Fibonacci level was swept
         /// </summary>
@@ -860,17 +874,17 @@ namespace Zuva.Services
         {
             if (_chart == null)
                 return;
-                
+
             // Create a unique ID for this sweep line
             string id = $"fib-sweep-{fibLevel.SessionType}-{ratio}-{swingPoint.Time.Ticks}";
-            
+
             // Remove any existing line
             _chart.RemoveObject(id);
-            
+
             // Calculate 2 minutes before and after the swing point
             DateTime startTime = swingPoint.Time.AddMinutes(-1);
             DateTime endTime = swingPoint.Time.AddMinutes(1);
-            
+
             // Draw a white horizontal line at the level price
             var line = _chart.DrawTrendLine(
                 id,
@@ -882,14 +896,14 @@ namespace Zuva.Services
                 1,
                 LineStyle.Solid
             );
-            
+
             // Store the line ID for cleanup
             if (!fibLevel.SweptLevelLineIds.ContainsKey(ratio))
             {
                 fibLevel.SweptLevelLineIds[ratio] = id;
             }
         }
-        
+
         /// <summary>
         /// Remove a single Fibonacci level from the chart
         /// </summary>
@@ -897,12 +911,12 @@ namespace Zuva.Services
         {
             if (_chart == null || string.IsNullOrEmpty(fib.FibonacciId))
                 return;
-                
+
             string baseId = fib.FibonacciId;
-            
+
             // Remove main trend line
             _chart.RemoveObject($"{baseId}-main");
-            
+
             // Remove all level lines and labels
             double[] levels = { -2.0, -1.5, -1.0, -0.5, -0.25, 0.0, 0.114, 0.886, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0 };
             foreach (double level in levels)
@@ -910,13 +924,13 @@ namespace Zuva.Services
                 _chart.RemoveObject($"{baseId}-level-{level}");
                 _chart.RemoveObject($"{baseId}-label-{level}");
             }
-            
+
             // DO NOT remove sweep lines - we want to keep these even after the Fibonacci level is removed
             // This ensures traders can still see where levels were swept
             // The sweep lines are:
             // fib-sweep-{SessionType}-{ratio}-{TimeStamp}
         }
-        
+
         /// <summary>
         /// Clean up all Fibonacci levels from the chart
         /// </summary>
@@ -924,16 +938,16 @@ namespace Zuva.Services
         {
             if (_chart == null)
                 return;
-                
+
             // Remove all Fibonacci visualization objects EXCEPT the sweep level lines
             foreach (var fib in _fibonacciLevels)
             {
                 RemoveFibonacciFromChart(fib);
-                
+
                 // Important: Do NOT remove swept level lines as these should persist
                 // even after the Fibonacci level is removed
             }
-            
+
             // Clear the collection
             _fibonacciLevels.Clear();
         }

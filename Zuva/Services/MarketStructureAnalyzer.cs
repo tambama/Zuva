@@ -817,7 +817,9 @@ namespace Zuva.Services
             if (_standardDeviations == null || _standardDeviations.Count == 0)
                 return;
 
-            // Create a list to track which standard deviations to remove
+            // Create lists to track swept levels and which standard deviations to remove
+            List<(StandardDeviation stdDev, bool isMinusTwo, double level)> sweptLevels =
+                new List<(StandardDeviation, bool, double)>();
             List<StandardDeviation> deviationsToRemove = new List<StandardDeviation>();
 
             // First handle removing standard deviations for swept swing points
@@ -886,16 +888,13 @@ namespace Zuva.Services
 
                         if (isSweep)
                         {
-                            // SD level has been swept
+                            // SD level has been swept - track it
+                            sweptLevels.Add((stdDev, true, stdDev.MinusTwo));
+
+                            // Set the swing point properties
                             swingPoint.ActivatedStdv = true; // Set the flag for score calculation
                             swingPoint.SweptDeviation = stdDev;
                             swingPoint.SweptMinusTwo = true;
-
-                            // Extend the line to the swing point
-                            if (_showStdv)
-                            {
-                                ExtendStandardDeviationLine(stdDev, swingPoint, true);
-                            }
 
                             // Mark level as swept
                             stdDev.MarkLevelAsSwept(true);
@@ -946,16 +945,13 @@ namespace Zuva.Services
 
                         if (isSweep)
                         {
-                            // SD level has been swept
+                            // SD level has been swept - track it
+                            sweptLevels.Add((stdDev, false, stdDev.MinusFour));
+
+                            // Set the swing point properties
                             swingPoint.ActivatedStdv = true; // Set the flag for score calculation
                             swingPoint.SweptDeviation = stdDev;
                             swingPoint.SweptMinusTwo = false;
-
-                            // Extend the line to the swing point
-                            if (_showStdv)
-                            {
-                                ExtendStandardDeviationLine(stdDev, swingPoint, false);
-                            }
 
                             // Mark level as swept
                             stdDev.MarkLevelAsSwept(false);
@@ -1009,16 +1005,13 @@ namespace Zuva.Services
 
                         if (isSweep)
                         {
-                            // SD level has been swept
+                            // SD level has been swept - track it
+                            sweptLevels.Add((stdDev, true, stdDev.MinusTwo));
+
+                            // Set the swing point properties
                             swingPoint.ActivatedStdv = true; // Set the flag for score calculation
                             swingPoint.SweptDeviation = stdDev;
                             swingPoint.SweptMinusTwo = true;
-
-                            // Extend the line to the swing point
-                            if (_showStdv)
-                            {
-                                ExtendStandardDeviationLine(stdDev, swingPoint, true);
-                            }
 
                             // Mark level as swept
                             stdDev.MarkLevelAsSwept(true);
@@ -1069,16 +1062,13 @@ namespace Zuva.Services
 
                         if (isSweep)
                         {
-                            // SD level has been swept
+                            // SD level has been swept - track it
+                            sweptLevels.Add((stdDev, false, stdDev.MinusFour));
+
+                            // Set the swing point properties
                             swingPoint.ActivatedStdv = true; // Set the flag for score calculation
                             swingPoint.SweptDeviation = stdDev;
                             swingPoint.SweptMinusTwo = false;
-
-                            // Extend the line to the swing point
-                            if (_showStdv)
-                            {
-                                ExtendStandardDeviationLine(stdDev, swingPoint, false);
-                            }
 
                             // Mark level as swept
                             stdDev.MarkLevelAsSwept(false);
@@ -1093,9 +1083,24 @@ namespace Zuva.Services
                 }
             }
 
+            // After checking all levels, draw only the extreme one if any levels were swept
+            if (sweptLevels.Count > 0)
+            {
+                // Find the extreme level based on swing point direction
+                (StandardDeviation extremeStdDev, bool extremeIsMinusTwo, double _) =
+                    swingPoint.Direction == Direction.Up
+                        ? sweptLevels.OrderByDescending(x => x.level).First() // For bullish, get highest
+                        : sweptLevels.OrderBy(x => x.level).First(); // For bearish, get lowest
+
+                // Draw only the extreme one
+                if (_showStdv)
+                {
+                    ExtendStandardDeviationLine(extremeStdDev, swingPoint, extremeIsMinusTwo);
+                }
+            }
+
             // Remove fully swept standard deviations from the collection
             // This doesn't affect the extended lines already drawn on the chart
-            // At the end of the method, remove all standard deviations that need to be removed
             foreach (var stdDev in deviationsToRemove)
             {
                 _standardDeviations.Remove(stdDev);
@@ -1128,7 +1133,6 @@ namespace Zuva.Services
         }
 
 // Add a method to extend the standard deviation line to the sweeping swing point
-        // Modify the ExtendStandardDeviationLine method in MarketStructureAnalyzer.cs
         private void ExtendStandardDeviationLine(StandardDeviation stdDev, SwingPoint swingPoint, bool isMinusTwo)
         {
             if (_chart == null)
@@ -1146,8 +1150,7 @@ namespace Zuva.Services
             // Get the standard deviation level
             double level = isMinusTwo ? stdDev.MinusTwo : stdDev.MinusFour;
             Color color = isMinusTwo ? Color.Green : Color.Red;
-            
-            
+
 
             // Calculate start and end times (3 units centered on the sweeping candle)
             // Using 1 minute as the example timeframe unit
