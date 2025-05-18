@@ -321,7 +321,7 @@ namespace Zuva.Services
         {
             // First, remove any rejection blocks at this index
             RemoveRejectionBlockAtIndex(index);
-            
+
             // Create an order block from the candle's FULL range (high to low)
             var orderBlock = new Level(
                 LevelType.OrderBlock,
@@ -361,7 +361,7 @@ namespace Zuva.Services
         {
             // First, remove any rejection blocks at this index
             RemoveRejectionBlockAtIndex(index);
-            
+
             // Create an order block from the candle's FULL range (high to low)
             var orderBlock = new Level(
                 LevelType.OrderBlock,
@@ -1186,11 +1186,12 @@ namespace Zuva.Services
 
         private void DrawInsideKeyLevelIcon(SwingPoint swingPoint)
         {
-            if (_chart == null || !swingPoint.InsideKeyLevel || !_showInsideKeyLevel)
+            if (_chart == null)
                 return;
 
             Color color = swingPoint.Direction == Direction.Up ? Color.Green : Color.Red;
-            var icon = _chart.DrawIcon($"kl-{swingPoint.Time}", ChartIconType.Circle, swingPoint.Time, swingPoint.Price, color);
+            var icon = _chart.DrawIcon($"kl-{swingPoint.Time}", ChartIconType.Circle, swingPoint.Time, swingPoint.Price,
+                color);
         }
 
         /// <summary>
@@ -1288,6 +1289,18 @@ namespace Zuva.Services
         // Detect CISD from orderflow that swept liquidity
         private void DetectCisdLevel(Level orderflow)
         {
+            if (orderflow.LowTime == new DateTime(2025, 05, 16, 13, 14, 00))
+            {
+                _chart.DrawVerticalLine("hameno", orderflow.LowTime, Color.Pink, 1, LineStyle.Dots);
+                var point = _swingPointHistory.FirstOrDefault(p => p.Index == orderflow.IndexHigh);
+                _logger($"{orderflow.HighTime}. Price: {point.Price}, InsideKeyLevel: {point.SweptKeyLevel != null}");
+                if (point.InsideKeyLevel)
+                {
+                    _chart.DrawVerticalLine("hamenofuti", point.SweptKeyLevel.Index, Color.Red, 1, LineStyle.Solid);
+                    _chart.DrawLineFromLevelToPoint(point.SweptKeyLevel, point);
+                }
+            }
+
             // Only process orderflows that swept liquidity
             if (orderflow.SweptSwingPoint == null)
                 return;
@@ -1370,7 +1383,10 @@ namespace Zuva.Services
 
                 var point = _swingPointHistory.FirstOrDefault(p =>
                     p.Index == orderflow.IndexHigh && p.Direction == Direction.Up);
-                DrawInsideKeyLevelIcon(point);
+                if (point != null && point.InsideKeyLevel && _showInsideKeyLevel)
+                {
+                    DrawInsideKeyLevelIcon(point);
+                }
             }
             else // Direction.Down (bearish orderflow creates bullish CISD)
             {
@@ -1439,10 +1455,13 @@ namespace Zuva.Services
 
                 // Manage max CISDs before adding the new one
                 ManageMaxCisdCount(Direction.Up);
-                
+
                 var point = _swingPointHistory.FirstOrDefault(p =>
                     p.Index == orderflow.IndexLow && p.Direction == Direction.Down);
-                DrawInsideKeyLevelIcon(point);
+                if (point != null && point.InsideKeyLevel && _showInsideKeyLevel)
+                {
+                    DrawInsideKeyLevelIcon(point);
+                }
             }
         }
 
@@ -1986,17 +2005,17 @@ namespace Zuva.Services
                 .OrderByDescending(rb => rb.Index)
                 .FirstOrDefault();
         }
-        
+
         private void RemoveRejectionBlockAtIndex(int index)
         {
             // Find any rejection blocks at this index
             var rejectionBlock = _rejectionBlocks.FirstOrDefault(rb => rb.Index == index);
-    
+
             // If we found a rejection block, remove it
             if (rejectionBlock != null)
             {
                 _rejectionBlocks.Remove(rejectionBlock);
-        
+
                 // Clean up visualization
                 if (_chart != null)
                 {
@@ -2007,13 +2026,13 @@ namespace Zuva.Services
                         _chart.RemoveObject(id);
                         _chart.RemoveObject($"{id}-midline");
                     }
-            
+
                     // Remove all quadrant lines for this rejection block
                     if (_showQuadrants)
                     {
                         // Quadrant percentages: 0, 25, 50, 75, 100
                         int[] percentages = { 0, 25, 50, 75, 100 };
-                
+
                         foreach (int percent in percentages)
                         {
                             string quadId = $"quad-{rejectionBlock.Direction}-{rejectionBlock.Index}-{percent}";
@@ -2328,6 +2347,9 @@ namespace Zuva.Services
         /// <summary>
         /// Checks if a swing point swept any quadrants in opposite-direction PD Arrays
         /// </summary>
+        /// <summary>
+        /// Checks if a swing point swept any quadrants in opposite-direction PD Arrays
+        /// </summary>
         private void CheckQuadrantsOnSwingPoint(SwingPoint swingPoint)
         {
             // Skip if swing point is null
@@ -2335,34 +2357,27 @@ namespace Zuva.Services
                 return;
 
             // Process only PD Arrays with the OPPOSITE direction of the swing point
-            // Bullish swing points can sweep bearish PD arrays
-            // Bearish swing points can sweep bullish PD arrays
             Direction pdArrayDirection = swingPoint.Direction == Direction.Up ? Direction.Down : Direction.Up;
 
-            // Get all relevant PD Array types: regular orderflow, FVGs, and OrderBlocks
+            // Get all relevant PD Array types: FVGs, OrderBlocks, and RejectionBlocks
             var eligiblePdArrays = new List<Level>();
-
-            // Add FVGs
-            //eligiblePdArrays.AddRange(_fvgs.Where(l => l.Direction == pdArrayDirection && l.IsActive));
-
-            // Add OrderBlocks
-            eligiblePdArrays.AddRange(_orderBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive));
-            
-            // Add RejectionBlocks
+            //eligiblePdArrays.AddRange(_orderBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive));
             eligiblePdArrays.AddRange(_rejectionBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive));
 
-            // First, identify all PD arrays that had quadrants swept
-            var pdArraysWithSweptQuadrants = new List<(Level pdArray, List<Quadrant> sweptQuadrants)>();
+            // Flag to track if this swing point actually swept any quadrants
+            bool sweptAnyQuadrants = false;
+            Level sweptLevel = null;
 
             foreach (var pdArray in eligiblePdArrays)
             {
                 // Check if any quadrants were swept by this swing point
                 var sweptQuadrants = pdArray.CheckForSweptQuadrants(swingPoint);
 
-                // If quadrants were swept, add this PD array to our list
+                // If quadrants were swept by this specific swing point
                 if (sweptQuadrants.Count > 0)
                 {
-                    pdArraysWithSweptQuadrants.Add((pdArray, sweptQuadrants));
+                    sweptAnyQuadrants = true;
+                    sweptLevel = pdArray; // Store the PD array that was swept
 
                     // Update visualization for swept quadrants
                     if (_showQuadrants)
@@ -2372,40 +2387,17 @@ namespace Zuva.Services
                             UpdateQuadrantVisualization(pdArray, quadrant);
                         }
                     }
+
+                    // Draw a rectangle from the PD array to this swing point
+                    _chart.DrawLineFromLevelToPoint(pdArray, swingPoint);
                 }
             }
 
-            // If we have PD arrays with swept quadrants, find the oldest one (lowest index)
-            if (pdArraysWithSweptQuadrants.Count > 0)
+            // Only mark the swing point as inside a key level if it actually swept quadrants itself
+            if (sweptAnyQuadrants)
             {
-                // Sort by index (ascending) to find the oldest PD array
-                var oldestPdArray = pdArraysWithSweptQuadrants
-                    .OrderBy(item => item.pdArray.Index)
-                    .First()
-                    .pdArray;
-
-                // Check if the swing point closed inside the extreme boundary of the oldest PD array
-                bool closedInsideExtreme = false;
-
-                // For bearish PD arrays, check if bullish swing point closed below the high
-                if (oldestPdArray.Direction == Direction.Down && swingPoint.Direction == Direction.Up)
-                {
-                    closedInsideExtreme = swingPoint.Bar.Close < oldestPdArray.High;
-                }
-                // For bullish PD arrays, check if bearish swing point closed above the low
-                else if (oldestPdArray.Direction == Direction.Up && swingPoint.Direction == Direction.Down)
-                {
-                    closedInsideExtreme = swingPoint.Bar.Close > oldestPdArray.Low;
-                }
-
-                // Only mark the swing point if it closed inside extreme boundary of the oldest PD array
-                if (closedInsideExtreme)
-                {
-                    swingPoint.InsideKeyLevel = true;
-    
-                    // Draw a line from the extreme PD array to the swing point
-                    _chart.DrawLineFromLevelToPoint(oldestPdArray, swingPoint);
-                }
+                swingPoint.InsideKeyLevel = true;
+                swingPoint.SweptKeyLevel = sweptLevel;
             }
         }
 

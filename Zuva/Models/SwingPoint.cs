@@ -44,6 +44,7 @@ public class SwingPoint
     
     // Simple boolean flag for quadrant sweeping
     public bool InsideKeyLevel { get; set; }
+    public Level SweptKeyLevel { get; set; }
     
     // References to the activated levels
     public Level ActivatedFVGLevel { get; set; }
