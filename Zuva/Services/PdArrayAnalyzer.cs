@@ -2362,7 +2362,7 @@ namespace Zuva.Services
             // Get all relevant PD Array types: FVGs, OrderBlocks, and RejectionBlocks
             var eligiblePdArrays = new List<Level>();
             //eligiblePdArrays.AddRange(_orderBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive));
-            eligiblePdArrays.AddRange(_rejectionBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive));
+            eligiblePdArrays.AddRange(_rejectionBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive && l.Index != swingPoint.Index));
 
             // Flag to track if this swing point actually swept any quadrants
             bool sweptAnyQuadrants = false;
