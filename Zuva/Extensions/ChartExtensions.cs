@@ -329,5 +329,43 @@ namespace Zuva.Extensions
                 );
             }
         }
+        
+        public static void DrawLineFromLevelToPoint(this Chart chart, Level pdArray, SwingPoint swingPoint)
+        {
+            // Create a unique ID for this line
+            string id = $"keyLevel-line-{pdArray.Index}-{swingPoint.Index}";
+
+            // Determine start point (from PD array)
+            DateTime startTime;
+            double startPrice;
+    
+            // For bearish PD arrays with bullish swing points, use the high
+            if (pdArray.Direction == Direction.Down && swingPoint.Direction == Direction.Up)
+            {
+                startTime = pdArray.HighTime;
+                startPrice = pdArray.High;
+            }
+            // For bullish PD arrays with bearish swing points, use the low
+            else
+            {
+                startTime = pdArray.LowTime;
+                startPrice = pdArray.Low;
+            }
+
+            // Draw a line connecting the PD array extreme to the swing point
+            chart.DrawStraightLine(
+                id,
+                startTime,
+                startPrice,
+                swingPoint.Time,
+                swingPoint.Price,
+                null, // No label
+                LineStyle.Dots, // Dotted line style
+                Color.Yellow, // Use yellow color to match liquidity sweep style
+                false, // No label
+                true, // Remove existing
+                false // Not extended
+            );
+        }
     }
 }

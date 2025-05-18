@@ -2402,6 +2402,9 @@ namespace Zuva.Services
                 if (closedInsideExtreme)
                 {
                     swingPoint.InsideKeyLevel = true;
+    
+                    // Draw a line from the extreme PD array to the swing point
+                    _chart.DrawLineFromLevelToPoint(oldestPdArray, swingPoint);
                 }
             }
         }
