@@ -127,6 +127,7 @@ namespace Zuva.Services
         /// </summary>
         public void DetectFVG(Bars bars, int currentIndex)
         {
+            return;
             // Need at least 3 bars to detect a FVG
             if (currentIndex < 2)
                 return;
@@ -2342,7 +2343,7 @@ namespace Zuva.Services
             var eligiblePdArrays = new List<Level>();
 
             // Add FVGs
-            eligiblePdArrays.AddRange(_fvgs.Where(l => l.Direction == pdArrayDirection && l.IsActive));
+            //eligiblePdArrays.AddRange(_fvgs.Where(l => l.Direction == pdArrayDirection && l.IsActive));
 
             // Add OrderBlocks
             eligiblePdArrays.AddRange(_orderBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive));
