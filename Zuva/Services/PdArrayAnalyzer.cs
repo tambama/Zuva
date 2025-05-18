@@ -318,6 +318,9 @@ namespace Zuva.Services
         /// </summary>
         private void CreateBullishOrderBlock(Bars bars, Bar bar, int index)
         {
+            // First, remove any rejection blocks at this index
+            RemoveRejectionBlockAtIndex(index);
+            
             // Create an order block from the candle's FULL range (high to low)
             var orderBlock = new Level(
                 LevelType.OrderBlock,
@@ -355,6 +358,9 @@ namespace Zuva.Services
         /// </summary>
         private void CreateBearishOrderBlock(Bars bars, Bar bar, int index)
         {
+            // First, remove any rejection blocks at this index
+            RemoveRejectionBlockAtIndex(index);
+            
             // Create an order block from the candle's FULL range (high to low)
             var orderBlock = new Level(
                 LevelType.OrderBlock,
@@ -1099,7 +1105,6 @@ namespace Zuva.Services
                                              g.Direction == lastFvgInOrderflow.Direction))
                     {
                         _gauntlets.Add(lastFvgInOrderflow);
-                        DrawInsideKeyLevelIcon(lastSwingPoint);
                     }
 
                     // Draw it if visualization is enabled
@@ -1184,7 +1189,7 @@ namespace Zuva.Services
                 return;
 
             Color color = swingPoint.Direction == Direction.Up ? Color.Green : Color.Red;
-            _chart.DrawIcon($"kl-{swingPoint.Time}", ChartIconType.Circle, swingPoint.Time, swingPoint.Price, color);
+            var icon = _chart.DrawIcon($"kl-{swingPoint.Time}", ChartIconType.Circle, swingPoint.Time, swingPoint.Price, color);
         }
 
         /// <summary>
@@ -1361,6 +1366,10 @@ namespace Zuva.Services
 
                 // Manage max CISDs before adding the new one
                 ManageMaxCisdCount(Direction.Down);
+
+                var point = _swingPointHistory.FirstOrDefault(p =>
+                    p.Index == orderflow.IndexHigh && p.Direction == Direction.Up);
+                DrawInsideKeyLevelIcon(point);
             }
             else // Direction.Down (bearish orderflow creates bullish CISD)
             {
@@ -1429,6 +1438,10 @@ namespace Zuva.Services
 
                 // Manage max CISDs before adding the new one
                 ManageMaxCisdCount(Direction.Up);
+                
+                var point = _swingPointHistory.FirstOrDefault(p =>
+                    p.Index == orderflow.IndexLow && p.Direction == Direction.Down);
+                DrawInsideKeyLevelIcon(point);
             }
         }
 
@@ -1972,6 +1985,43 @@ namespace Zuva.Services
                 .OrderByDescending(rb => rb.Index)
                 .FirstOrDefault();
         }
+        
+        private void RemoveRejectionBlockAtIndex(int index)
+        {
+            // Find any rejection blocks at this index
+            var rejectionBlock = _rejectionBlocks.FirstOrDefault(rb => rb.Index == index);
+    
+            // If we found a rejection block, remove it
+            if (rejectionBlock != null)
+            {
+                _rejectionBlocks.Remove(rejectionBlock);
+        
+                // Clean up visualization
+                if (_chart != null)
+                {
+                    // Remove the rejection block rectangle and midline
+                    if (_showRejectionBlock)
+                    {
+                        string id = $"rb-{rejectionBlock.Direction}-{rejectionBlock.Index}";
+                        _chart.RemoveObject(id);
+                        _chart.RemoveObject($"{id}-midline");
+                    }
+            
+                    // Remove all quadrant lines for this rejection block
+                    if (_showQuadrants)
+                    {
+                        // Quadrant percentages: 0, 25, 50, 75, 100
+                        int[] percentages = { 0, 25, 50, 75, 100 };
+                
+                        foreach (int percent in percentages)
+                        {
+                            string quadId = $"quad-{rejectionBlock.Direction}-{rejectionBlock.Index}-{percent}";
+                            _chart.RemoveObject(quadId);
+                        }
+                    }
+                }
+            }
+        }
 
         #endregion
 
@@ -2500,12 +2550,6 @@ namespace Zuva.Services
 
                 // NEW: Check if this swing point sweeps any quadrants
                 CheckQuadrantsOnSwingPoint(currentPoint);
-            }
-
-            // Process each swing point to check for rejection blocks
-            foreach (var swingPoint in _swingPointHistory)
-            {
-                CheckForRejectionBlock(swingPoint);
             }
         }
 
