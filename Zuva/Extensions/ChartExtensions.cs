@@ -332,14 +332,20 @@ namespace Zuva.Extensions
         
         public static void DrawLineFromLevelToPoint(this Chart chart, Level pdArray, SwingPoint swingPoint)
         {
-            // Create a unique GUID ID for this rectangle
-            string guid = Guid.NewGuid().ToString();
-            string id = $"keyLevel-rect-{guid}";
+            if (chart == null || pdArray == null || swingPoint == null)
+                return;
+
+            // Create a consistent ID using the level and swing point properties
+            string id = $"keyLevel-rect-{pdArray.Direction}-{pdArray.Index}";
+
+            // Remove any existing rectangle with this ID before drawing a new one
+            chart.RemoveObject(id);
 
             // Determine start point (from PD array)
             DateTime startTime;
             double lowPrice, highPrice;
-    
+            Color color;
+
             // For bearish PD arrays with bullish swing points
             if (pdArray.Direction == Direction.Down && swingPoint.Direction == Direction.Up)
             {
@@ -347,6 +353,7 @@ namespace Zuva.Extensions
                 // Use the low and high prices of the PD array
                 lowPrice = pdArray.Low;
                 highPrice = pdArray.High;
+                color = Color.Pink;
             }
             // For bullish PD arrays with bearish swing points
             else
@@ -355,6 +362,7 @@ namespace Zuva.Extensions
                 // Use the low and high prices of the PD array
                 lowPrice = pdArray.Low;
                 highPrice = pdArray.High;
+                color = Color.Green;
             }
 
             // Draw a rectangle from the PD array to the swing point
@@ -364,12 +372,12 @@ namespace Zuva.Extensions
                 lowPrice,
                 swingPoint.Time,
                 highPrice,
-                Color.Yellow  // Use yellow color to match liquidity sweep style
+                color // Use yellow color to match liquidity sweep style
             );
-    
+
             // Make it semi-transparent
             rectangle.IsFilled = true;
-            rectangle.Color = Color.FromArgb(10, rectangle.Color);  // Low opacity (10 out of 255)
+            rectangle.Color = Color.FromArgb(3, rectangle.Color);  // Low opacity (10 out of 255)
         }
     }
 }

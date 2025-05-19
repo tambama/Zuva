@@ -127,7 +127,6 @@ namespace Zuva.Services
         /// </summary>
         public void DetectFVG(Bars bars, int currentIndex)
         {
-            return;
             // Need at least 3 bars to detect a FVG
             if (currentIndex < 2)
                 return;
@@ -184,7 +183,7 @@ namespace Zuva.Services
                 }
 
                 // Check for bullish order block
-                if (_showOrderBlock && currentIndex >= 3 && _swingPointDetector != null)
+                if (currentIndex >= 3 && _swingPointDetector != null)
                 {
                     // First, check if candle1 is a swing point (specifically a swing low)
                     // We're looking for an opposing swing point in the direction of the recent swing
@@ -272,7 +271,7 @@ namespace Zuva.Services
                 }
 
                 // Check for bearish order block
-                if (_showOrderBlock && currentIndex >= 3 && _swingPointDetector != null)
+                if (currentIndex >= 3 && _swingPointDetector != null)
                 {
                     // First, check if candle1 is a swing point (specifically a swing high)
                     // We're looking for an opposing swing point in the direction of the recent swing
@@ -1289,17 +1288,6 @@ namespace Zuva.Services
         // Detect CISD from orderflow that swept liquidity
         private void DetectCisdLevel(Level orderflow)
         {
-            if (orderflow.LowTime == new DateTime(2025, 05, 16, 13, 14, 00))
-            {
-                _chart.DrawVerticalLine("hameno", orderflow.LowTime, Color.Pink, 1, LineStyle.Dots);
-                var point = _swingPointHistory.FirstOrDefault(p => p.Index == orderflow.IndexHigh);
-                _logger($"{orderflow.HighTime}. Price: {point.Price}, InsideKeyLevel: {point.SweptKeyLevel != null}");
-                if (point.InsideKeyLevel)
-                {
-                    _chart.DrawVerticalLine("hamenofuti", point.SweptKeyLevel.Index, Color.Red, 1, LineStyle.Solid);
-                    _chart.DrawLineFromLevelToPoint(point.SweptKeyLevel, point);
-                }
-            }
 
             // Only process orderflows that swept liquidity
             if (orderflow.SweptSwingPoint == null)
@@ -1385,7 +1373,7 @@ namespace Zuva.Services
                     p.Index == orderflow.IndexHigh && p.Direction == Direction.Up);
                 if (point != null && point.InsideKeyLevel && _showInsideKeyLevel)
                 {
-                    DrawInsideKeyLevelIcon(point);
+                    //DrawInsideKeyLevelIcon(point);
                 }
             }
             else // Direction.Down (bearish orderflow creates bullish CISD)
@@ -1460,7 +1448,7 @@ namespace Zuva.Services
                     p.Index == orderflow.IndexLow && p.Direction == Direction.Down);
                 if (point != null && point.InsideKeyLevel && _showInsideKeyLevel)
                 {
-                    DrawInsideKeyLevelIcon(point);
+                    //DrawInsideKeyLevelIcon(point);
                 }
             }
         }
@@ -2351,79 +2339,81 @@ namespace Zuva.Services
         /// Checks if a swing point swept any quadrants in opposite-direction PD Arrays
         /// </summary>
         private void CheckQuadrantsOnSwingPoint(SwingPoint swingPoint)
-{
-    // Skip if swing point is null
-    if (swingPoint == null)
-        return;
-
-    // Process only PD Arrays with the OPPOSITE direction of the swing point
-    Direction pdArrayDirection = swingPoint.Direction == Direction.Up ? Direction.Down : Direction.Up;
-
-    // Get all relevant PD Array types
-    var eligiblePdArrays = new List<Level>();
-    eligiblePdArrays.AddRange(_rejectionBlocks.Where(l => l.Direction == pdArrayDirection && l.IsActive && l.Index != swingPoint.Index));
-
-    // Flag to track if this swing point actually swept any quadrants
-    bool sweptAnyQuadrants = false;
-    bool shouldMarkAsInside = false; // Flag to control marking as inside
-    Level sweptLevel = null;
-
-    foreach (var pdArray in eligiblePdArrays)
-    {
-        // Check if any quadrants were swept by this swing point
-        var sweptQuadrants = pdArray.CheckForSweptQuadrants(swingPoint);
-
-        // If quadrants were swept by this specific swing point
-        if (sweptQuadrants.Count > 0)
         {
-            sweptAnyQuadrants = true;
-            sweptLevel = pdArray; // Store the PD array that was swept
+            // Skip if swing point is null
+            if (swingPoint == null)
+                return;
 
-            // Determine if we should mark as inside based on the new rules
-            bool isBullishCandle = swingPoint.Bar.Close > swingPoint.Bar.Open;
-            
-            // Find highest/lowest quadrant in the PD array
-            double highestQuadrantPrice = pdArray.Quadrants.Max(q => q.Price);
-            double lowestQuadrantPrice = pdArray.Quadrants.Min(q => q.Price);
-            
-            // For bullish candles interacting with bearish quadrants
-            if (isBullishCandle && pdArray.Direction == Direction.Down)
-            {
-                // Mark as inside if close is BELOW the highest bearish quadrant
-                shouldMarkAsInside = swingPoint.Bar.Close < highestQuadrantPrice;
-            }
-            // For bearish candles interacting with bullish quadrants
-            else if (!isBullishCandle && pdArray.Direction == Direction.Up)
-            {
-                // Mark as inside if close is ABOVE the lowest bullish quadrant
-                shouldMarkAsInside = swingPoint.Bar.Close > lowestQuadrantPrice;
-            }
+            // Process only PD Arrays with the OPPOSITE direction of the swing point
+            Direction pdArrayDirection = swingPoint.Direction == Direction.Up ? Direction.Down : Direction.Up;
 
-            // Update visualization for swept quadrants
-            if (_showQuadrants)
+            // Get all relevant PD Array types
+            var eligiblePdArrays = new List<Level>();
+            eligiblePdArrays.AddRange(_orderBlocks.Where(l =>
+                l.Direction == pdArrayDirection && l.IsActive && l.Index != swingPoint.Index));
+            eligiblePdArrays.AddRange(_rejectionBlocks.Where(l =>
+                l.Direction == pdArrayDirection && l.IsActive && l.Index != swingPoint.Index));
+
+            // Flag to track if this swing point actually swept any quadrants
+            bool sweptAnyQuadrants = false;
+            bool shouldMarkAsInside = false; // Flag to control marking as inside
+            Level sweptLevel = null;
+
+            foreach (var pdArray in eligiblePdArrays)
             {
-                foreach (var quadrant in sweptQuadrants)
+                // Check if any quadrants were swept by this swing point
+                var sweptQuadrants = pdArray.CheckForSweptQuadrants(swingPoint);
+
+                // If quadrants were swept by this specific swing point
+                if (sweptQuadrants.Count > 0)
                 {
-                    UpdateQuadrantVisualization(pdArray, quadrant);
+                    sweptAnyQuadrants = true;
+                    sweptLevel = pdArray; // Store the PD array that was swept
+
+                    // Find highest/lowest quadrant in the PD array
+                    double highestQuadrantPrice = pdArray.Quadrants.Max(q => q.Price);
+                    double lowestQuadrantPrice = pdArray.Quadrants.Min(q => q.Price);
+
+                    // For bullish swing points interacting with bearish quadrants
+                    if (swingPoint.Direction == Direction.Up && pdArray.Direction == Direction.Down)
+                    {
+                        // Mark as inside if open is BELOW the highest quadrant but high is ABOVE the lowest quadrant
+                        shouldMarkAsInside = swingPoint.Bar.Open < highestQuadrantPrice &&
+                                             swingPoint.Bar.High > lowestQuadrantPrice;
+                    }
+                    // For bearish swing points interacting with bullish quadrants
+                    else if (swingPoint.Direction == Direction.Down && pdArray.Direction == Direction.Up)
+                    {
+                        // Mark as inside if open is ABOVE the lowest quadrant but low is BELOW the highest quadrant
+                        shouldMarkAsInside = swingPoint.Bar.Open > lowestQuadrantPrice &&
+                                             swingPoint.Bar.Low < highestQuadrantPrice;
+                    }
+
+                    // Update visualization for swept quadrants
+                    if (_showQuadrants)
+                    {
+                        foreach (var quadrant in sweptQuadrants)
+                        {
+                            UpdateQuadrantVisualization(pdArray, quadrant);
+                        }
+                    }
+
+                    // Draw a rectangle from the PD array to this swing point if we're marking as inside
+                    if (shouldMarkAsInside && _showInsideKeyLevel)
+                    {
+                        _chart.DrawLineFromLevelToPoint(pdArray, swingPoint);
+                    }
                 }
             }
 
-            // Draw a rectangle from the PD array to this swing point if we're marking as inside
-            if (shouldMarkAsInside)
+            // Only mark the swing point as inside a key level if it swept quadrants
+            // AND passes our inside key level condition
+            if (sweptAnyQuadrants && shouldMarkAsInside)
             {
-                _chart.DrawLineFromLevelToPoint(pdArray, swingPoint);
+                swingPoint.InsideKeyLevel = true;
+                swingPoint.SweptKeyLevel = sweptLevel;
             }
         }
-    }
-
-    // Only mark the swing point as inside a key level if it swept quadrants
-    // AND passes our inside key level condition
-    if (sweptAnyQuadrants && shouldMarkAsInside)
-    {
-        swingPoint.InsideKeyLevel = true;
-        swingPoint.SweptKeyLevel = sweptLevel;
-    }
-}
 
         #endregion
 
