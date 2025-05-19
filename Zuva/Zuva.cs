@@ -25,6 +25,8 @@ namespace Zuva
 
         [Parameter("Macro Times", Group = "Time Management", DefaultValue = true)]
         public bool ShowMacros { get; set; }
+        [Parameter("Macro Filter", Group = "Time Management", DefaultValue = false)]
+        public bool MacroFilter { get; set; }
 
         [Parameter("Market Structure", Group = "Market Structure", DefaultValue = true)]
         public bool ShowMarketStructure { get; set; }
@@ -81,6 +83,11 @@ namespace Zuva
 
         [Parameter("Pair", Group = "SMT", DefaultValue = "")]
         public string SMTPair { get; set; }
+        [Parameter("Enable Log", Group = "Notifications", DefaultValue = false)]
+        public bool EnableLog { get; set; }
+        
+        [Parameter("Enable Telegram", Group = "Notifications", DefaultValue = false)]
+        public bool EnableTelegram { get; set; }
 
         [Output("Swing High", Color = Colors.White, PlotType = PlotType.Points, Thickness = 1)]
         public IndicatorDataSeries SwingHighs { get; set; }
@@ -136,6 +143,11 @@ namespace Zuva
 
         // Time Manager
         private TimeManager _timeManager;
+        
+        // Notification Service
+        private NotificationService _notificationService;
+        private const string TelegramChatId = "5631623580";
+        private const string TelegramToken = "7507336625:AAHM4oYlg_5XIjzzCNFCR_oyLu1Y69qkvns";
 
         // Flag to track if we have enough data for market structure analysis
         private bool _marketStructureInitialized = false;
@@ -147,6 +159,16 @@ namespace Zuva
         {
             // Delete all obk=jects from Chart
             Chart.RemoveAllObjects();
+            
+            // Initialize the notification service
+            _notificationService = new NotificationService(
+                EnableLog, 
+                EnableTelegram, 
+                TelegramChatId, 
+                TelegramToken,
+                Symbol.Name,
+                UtcOffset,
+                message => Print(message));
 
             // Initialize the swing detector
             _swingPoints = new List<SwingPoint>();
@@ -199,6 +221,9 @@ namespace Zuva
                     _swingDetector, // Pass swing detector for order block detection
                     ShowSMT,
                     SMTPair,
+                    MacroFilter,
+                    _notificationService,
+                    _timeManager,
                     message => Print(message));
             }
             catch (Exception ex)

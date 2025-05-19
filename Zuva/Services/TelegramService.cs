@@ -1,8 +1,7 @@
-using System;
 using System.Net;
 using Telegram.Bot;
 
-namespace Mwenje.Services;
+namespace Zuva.Services;
 
 public class TelegramService
 {

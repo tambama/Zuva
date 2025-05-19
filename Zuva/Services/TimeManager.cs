@@ -179,7 +179,7 @@ namespace Zuva.Services
                 new TimeRange(new TimeSpan(8, 50, 0), new TimeSpan(9, 10, 0)),
                 new TimeRange(new TimeSpan(9, 50, 0), new TimeSpan(10, 10, 0)),
                 new TimeRange(new TimeSpan(10, 50, 0), new TimeSpan(11, 10, 0)),
-                new TimeRange(new TimeSpan(11, 10, 0), new TimeSpan(12, 10, 0)),
+                new TimeRange(new TimeSpan(11, 50, 0), new TimeSpan(12, 10, 0)),
                 new TimeRange(new TimeSpan(12, 50, 0), new TimeSpan(13, 10, 0)),
                 new TimeRange(new TimeSpan(13, 50, 0), new TimeSpan(14, 10, 0)),
                 new TimeRange(new TimeSpan(14, 50, 0), new TimeSpan(15, 10, 0)),

@@ -63,6 +63,13 @@ namespace Zuva.Services
         private readonly bool _showSMT;
         private readonly string _smtPair;
 
+        // Time
+        private readonly bool _macroFilter;
+        private readonly TimeManager _timeManager;
+
+        // Notifications
+        private readonly NotificationService _notificationService;
+
         public delegate double PairDataProviderDelegate(string pairSymbol, DateTime time, int index,
             Direction direction);
 
@@ -98,6 +105,9 @@ namespace Zuva.Services
             SwingPointDetector swingPointDetector = null,
             bool showSMT = false,
             string smtPair = "",
+            bool macroFilter = false,
+            NotificationService notificationService = null,
+            TimeManager timeManager = null,
             Action<string> logger = null)
         {
             _chart = chart;
@@ -117,6 +127,9 @@ namespace Zuva.Services
             _swingPointDetector = swingPointDetector;
             _showSMT = showSMT;
             _smtPair = smtPair;
+            _macroFilter = _macroFilter;
+            _notificationService = notificationService;
+            _timeManager = timeManager;
             _logger = logger ?? (_ => { });
         }
 
@@ -1063,6 +1076,16 @@ namespace Zuva.Services
             if (_fvgs == null || _fvgs.Count == 0)
                 return;
 
+            // Get the time of the sweeping candle for macro time check
+            DateTime sweepingCandleTime = Bars[sweepingCandleIndex].OpenTime;
+
+            // Check if we're filtering by macro time and if this candle is in a macro period
+            bool isInMacro = !_macroFilter || (_timeManager != null && _timeManager.IsInMacroTime(sweepingCandleTime));
+
+            // Skip processing if we're filtering by macro and not in a macro time
+            if (_macroFilter && !isInMacro)
+                return;
+
             // First, find the last FVG within the orderflow
             var lastFvgInOrderflow = FindLastFVGInOrderflow(orderflow, _fvgs);
             SwingPoint lastSwingPoint = null;
@@ -1094,6 +1117,12 @@ namespace Zuva.Services
                 // If the sweeping candle is part of the FVG, mark it as a Gauntlet
                 if (isSweepingCandlePartOfFVG)
                 {
+                    // Ensure the FVG and orderflow have the same direction
+                    if (lastFvgInOrderflow.Direction != orderflow.Direction)
+                    {
+                        return; // Skip if directions don't match
+                    }
+                    
                     // Mark the FVG as a Gauntlet
                     lastFvgInOrderflow.IsGauntlet = true;
 
@@ -1105,6 +1134,9 @@ namespace Zuva.Services
                                              g.Direction == lastFvgInOrderflow.Direction))
                     {
                         _gauntlets.Add(lastFvgInOrderflow);
+
+                        // Send notification for Gauntlet detection
+                        _notificationService?.NotifyGauntletDetected(lastFvgInOrderflow.Direction);
                     }
 
                     // Draw it if visualization is enabled
@@ -1277,7 +1309,8 @@ namespace Zuva.Services
                 gauntlet,
                 id,
                 true, // Draw midpoint
-                25 // Higher opacity for Gauntlets
+                25, // Higher opacity for Gauntlets
+                length: 1
             );
         }
 
@@ -1288,7 +1321,6 @@ namespace Zuva.Services
         // Detect CISD from orderflow that swept liquidity
         private void DetectCisdLevel(Level orderflow)
         {
-
             // Only process orderflows that swept liquidity
             if (orderflow.SweptSwingPoint == null)
                 return;
@@ -1454,6 +1486,7 @@ namespace Zuva.Services
         }
 
         // Check for CISD confirmation and activation
+        // Check for CISD confirmation and activation
         private void CheckCisdConfirmation(SwingPoint swingPoint, int currentIndex)
         {
             // Get all CISD levels that are not yet confirmed
@@ -1464,6 +1497,13 @@ namespace Zuva.Services
             // Check for CISD confirmation
             foreach (var cisd in pendingCisdLevels)
             {
+                // Check if we're filtering by macro time and if this swing point is in a macro
+                bool isInMacro = !_macroFilter || (_timeManager != null && _timeManager.IsInMacroTime(swingPoint.Time));
+
+                // Skip processing if we're filtering by macro and not in a macro time
+                if (_macroFilter && !isInMacro)
+                    continue;
+
                 if (cisd.Direction == Direction.Up) // Bullish CISD
                 {
                     // Bullish CISD is confirmed when a bullish candle closes above the CISD high
@@ -1510,6 +1550,9 @@ namespace Zuva.Services
                                 false
                             );
                         }
+
+                        // Send notification for CISD confirmation
+                        _notificationService?.NotifyCisdConfirmation(Direction.Up);
                     }
                 }
                 else // Direction.Down (Bearish CISD)
@@ -1558,6 +1601,9 @@ namespace Zuva.Services
                                 false
                             );
                         }
+
+                        // Send notification for CISD confirmation
+                        _notificationService?.NotifyCisdConfirmation(Direction.Down);
                     }
                 }
             }

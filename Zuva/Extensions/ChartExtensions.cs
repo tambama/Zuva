@@ -75,10 +75,10 @@ namespace Zuva.Extensions
             rectangle.Color = Color.FromArgb(opacity, rectangle.Color);
         }
 
-        public static void DrawRectangle(this Chart chart, Level level, string id, bool drawMidPoint = false, int opacity = 10)
+        public static void DrawRectangle(this Chart chart, Level level, string id, bool drawMidPoint = false, int opacity = 10, int length = 5)
         {
-            var endTime = level.StretchTo ?? level.LowTime.AddMinutes(5);
             var startTime = level.LowTime < level.HighTime ? level.LowTime : level.HighTime;
+            var endTime = level.StretchTo ?? (length > 0 ? startTime.AddMinutes(length) : level.LowTime.AddMinutes(5));
             var startPrice = level.LowTime < level.HighTime ? level.Low : level.High;
             var endPrice = level.LowTime < level.HighTime ? level.High : level.Low;
         
@@ -377,7 +377,7 @@ namespace Zuva.Extensions
 
             // Make it semi-transparent
             rectangle.IsFilled = true;
-            rectangle.Color = Color.FromArgb(3, rectangle.Color);  // Low opacity (10 out of 255)
+            rectangle.Color = Color.FromArgb(5, rectangle.Color);  // Low opacity (10 out of 255)
         }
     }
 }
