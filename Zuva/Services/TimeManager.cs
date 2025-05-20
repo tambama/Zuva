@@ -37,6 +37,9 @@ namespace Zuva.Services
 
         // Dictionary to map hour to session
         private readonly Dictionary<int, SessionType> _hourToSessionMap;
+        
+        // Notifications Service
+        private readonly NotificationService _notificationService;
 
         /// <summary>
         /// Creates a new instance of the TimeManager
@@ -45,6 +48,7 @@ namespace Zuva.Services
             Chart chart,
             Bars bars,
             SwingPointDetector swingPointDetector,
+            NotificationService notificationService,
             bool showMacros = true,
             bool showFibLevels = false,
             int utcOffset = -4)
@@ -56,6 +60,7 @@ namespace Zuva.Services
             _macros = InitializeMacros();
             _bars = bars;
             _swingPointDetector = swingPointDetector;
+            _notificationService = notificationService;
 
             _swingPointDetector.LiquiditySwept += OnLiquiditySwept;
 
@@ -228,6 +233,12 @@ namespace Zuva.Services
 
                         // Mark this macro as drawn
                         _drawnMacroTimes.Add(macroKey);
+                        
+                        // Send notification for macro time entry - ALWAYS send regardless of notification settings
+                        if (_notificationService != null)
+                        {
+                            _notificationService.NotifyMacroTimeEntered(time);
+                        }
                     }
                 }
             }

@@ -12,7 +12,7 @@ namespace Zuva.Services
     {
         // Add a delegate for logging
         private readonly Action<string> _logger;
-        
+
         private readonly TelegramService _telegramService;
         private readonly bool _enableLog;
         private readonly bool _enableTelegram;
@@ -20,14 +20,14 @@ namespace Zuva.Services
         private readonly string _token;
         private readonly string _symbol;
         private readonly int _utcOffset;
-        
+
         // Track notification times
         private Dictionary<string, DateTime> _lastNotifications = new Dictionary<string, DateTime>();
 
-        public NotificationService( 
-            bool enableLog, 
-            bool enableTelegram, 
-            string chatId, 
+        public NotificationService(
+            bool enableLog,
+            bool enableTelegram,
+            string chatId,
             string token,
             string symbol,
             int Utc,
@@ -40,10 +40,7 @@ namespace Zuva.Services
             _token = token;
             _symbol = symbol;
             _utcOffset = Utc;
-            if (_enableTelegram)
-            {
-                _telegramService = new TelegramService();
-            }
+            _telegramService = new TelegramService();
         }
 
         /// <summary>
@@ -52,19 +49,19 @@ namespace Zuva.Services
         public void NotifyCisdConfirmation(Direction direction)
         {
             string key = $"CISD_{direction}_{_symbol}";
-            
+
             // Only send notification if we haven't sent one for this direction and symbol in the last 10 seconds
-            if (_lastNotifications.TryGetValue(key, out var lastTime) && 
+            if (_lastNotifications.TryGetValue(key, out var lastTime) &&
                 (DateTime.UtcNow.AddHours(_utcOffset) - lastTime).TotalSeconds < 10)
             {
                 return; // Skip duplicate notification
             }
-            
+
             _lastNotifications[key] = DateTime.UtcNow.AddHours(_utcOffset);
-            
+
             string directionText = direction == Direction.Up ? "Bullish" : "Bearish";
             string message = $"{directionText} CISD confirmed for {_symbol} at {DateTime.UtcNow.AddHours(_utcOffset)}";
-            
+
             SendNotification(message);
         }
 
@@ -74,19 +71,20 @@ namespace Zuva.Services
         public void NotifyGauntletDetected(Direction direction)
         {
             string key = $"Gauntlet_{direction}_{_symbol}";
-    
+
             // Only send notification if we haven't sent one for this direction and symbol in the last 10 seconds
-            if (_lastNotifications.TryGetValue(key, out var lastTime) && 
+            if (_lastNotifications.TryGetValue(key, out var lastTime) &&
                 (DateTime.UtcNow.AddHours(_utcOffset) - lastTime).TotalSeconds < 10)
             {
                 return; // Skip duplicate notification
             }
-    
+
             _lastNotifications[key] = DateTime.UtcNow.AddHours(_utcOffset);
-    
+
             string directionText = direction == Direction.Up ? "Bullish" : "Bearish";
-            string message = $"{directionText} Gauntlet detected for {_symbol} at {DateTime.UtcNow.AddHours(_utcOffset)}";
-    
+            string message =
+                $"{directionText} Gauntlet detected for {_symbol} at {DateTime.UtcNow.AddHours(_utcOffset)}";
+
             SendNotification(message);
         }
 
@@ -97,8 +95,45 @@ namespace Zuva.Services
         {
             string liquidityName = liquidityType.GetDescription();
             string message = $"{liquidityName} swept for {_symbol} at {DateTime.UtcNow.AddHours(_utcOffset)}";
-            
+
             SendNotification(message);
+        }
+
+        /// <summary>
+        /// Send a notification when price enters a macro time period (always sends regardless of notification settings)
+        /// </summary>
+        public void NotifyMacroTimeEntered(DateTime time)
+        {
+            // Adjust time for UTC offset to get the market time
+            DateTime marketTime = time.AddHours(_utcOffset);
+
+            if (marketTime >= DateTime.UtcNow.AddHours(_utcOffset + 1))
+                return;
+
+            string message =
+                $"MACRO TIME ALERT: Price entered macro time for {_symbol} at {marketTime:HH:mm:ss} (market time).";
+
+            // ALWAYS log to cTrader regardless of _enableLog setting
+            _logger(message);
+
+            // ALWAYS send Telegram message if credentials are available, regardless of _enableTelegram setting
+            if (!string.IsNullOrEmpty(_chatId) && !string.IsNullOrEmpty(_token))
+            {
+                try
+                {
+                    string result = _telegramService.SendTelegram(_chatId, _token, message);
+
+                    // Log error if there was an issue sending the Telegram message
+                    if (result.StartsWith("ERROR"))
+                    {
+                        _logger($"Failed to send macro time Telegram message: {result}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger($"Exception sending macro time Telegram message: {ex.Message}");
+                }
+            }
         }
 
         /// <summary>
@@ -111,14 +146,14 @@ namespace Zuva.Services
             {
                 _logger(message);
             }
-            
+
             // Send Telegram message if enabled
             if (_enableTelegram && !string.IsNullOrEmpty(_chatId) && !string.IsNullOrEmpty(_token))
             {
                 try
                 {
                     string result = _telegramService.SendTelegram(_chatId, _token, message);
-                    
+
                     // Log error if there was an issue sending the Telegram message
                     if (result.StartsWith("ERROR"))
                     {

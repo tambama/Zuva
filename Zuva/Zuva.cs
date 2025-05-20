@@ -189,6 +189,7 @@ namespace Zuva
                     Chart,
                     Bars,
                     _swingDetector,
+                    _notificationService,
                     ShowMacros,
                     ShowFibonacciLevels,
                     UtcOffset);
