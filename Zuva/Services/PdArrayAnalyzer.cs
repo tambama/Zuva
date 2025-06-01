@@ -1636,7 +1636,7 @@ namespace Zuva.Services
                             string id = $"cisd-{cisd.Direction}-{cisd.Index}-{barIndex}";
                             double priceLevel = cisd.High;
                             DateTime startTime = cisd.HighTime;
-                            Color cisdColor = Color.FromArgb(50, Color.Green);
+                            Color cisdColor = Color.FromArgb(70, Color.Green);
 
                             _chart.DrawStraightLine(
                                 id,

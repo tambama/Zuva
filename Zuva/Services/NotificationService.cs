@@ -104,6 +104,7 @@ namespace Zuva.Services
         /// </summary>
         public void NotifyMacroTimeEntered(DateTime time)
         {
+            return;
             // Adjust time for UTC offset to get the market time
             DateTime marketTime = time.AddHours(_utcOffset);
 
