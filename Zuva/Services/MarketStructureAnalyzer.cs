@@ -1,5 +1,6 @@
 using cAlgo.API;
 using Zuva.Extensions;
+using Zuva.Interfaces;
 using Zuva.Models;
 
 namespace Zuva.Services
@@ -8,7 +9,7 @@ namespace Zuva.Services
     /// Analyzes market structure based on swing points to identify patterns like
     /// Break of Structure (BOS), Change of Character (CHoCH), inducements, and liquidity points
     /// </summary>
-    public class MarketStructureAnalyzer
+    public class MarketStructureAnalyzer : IMarketStructureAnalyzer
     {
         private readonly Chart _chart;
         private readonly IndicatorDataSeries _highs;

@@ -1,4 +1,5 @@
 using cAlgo.API;
+using Zuva.Interfaces;
 using Zuva.Models;
 using System.Collections.Generic;
 using System;
@@ -11,14 +12,14 @@ namespace Zuva.Services
     /// Manages time-related functionality, including ICT macro time periods, 
     /// daily high/low levels, session high/low levels, and Fibonacci levels
     /// </summary>
-    public class TimeManager
+    public class TimeManager : ITimeManager
     {
         private readonly Chart _chart;
         private readonly List<TimeRange> _macros;
         private readonly bool _showMacros;
         private readonly int _utcOffset;
         private readonly Bars _bars;
-        private readonly SwingPointDetector _swingPointDetector;
+        private readonly ISwingPointDetector _swingPointDetector;
 
         // Fibonacci-related fields
         private readonly List<FibonacciLevel> _fibonacciLevels = new List<FibonacciLevel>();
@@ -39,7 +40,7 @@ namespace Zuva.Services
         private readonly Dictionary<int, SessionType> _hourToSessionMap;
         
         // Notifications Service
-        private readonly NotificationService _notificationService;
+        private readonly INotificationService _notificationService;
 
         /// <summary>
         /// Creates a new instance of the TimeManager
@@ -47,8 +48,8 @@ namespace Zuva.Services
         public TimeManager(
             Chart chart,
             Bars bars,
-            SwingPointDetector swingPointDetector,
-            NotificationService notificationService,
+            ISwingPointDetector swingPointDetector,
+            INotificationService notificationService,
             bool showMacros = true,
             bool showFibLevels = false,
             int utcOffset = -4)

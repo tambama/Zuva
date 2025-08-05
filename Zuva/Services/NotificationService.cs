@@ -1,6 +1,7 @@
 using cAlgo.API;
 using System;
 using Zuva.Extensions;
+using Zuva.Interfaces;
 using Zuva.Models;
 
 namespace Zuva.Services
@@ -8,7 +9,7 @@ namespace Zuva.Services
     /// <summary>
     /// Service for sending notifications via logging and Telegram
     /// </summary>
-    public class NotificationService
+    public class NotificationService : INotificationService
     {
         // Add a delegate for logging
         private readonly Action<string> _logger;
@@ -156,6 +157,34 @@ namespace Zuva.Services
                     string result = _telegramService.SendTelegram(_chatId, _token, message);
 
                     // Log error if there was an issue sending the Telegram message
+                    if (result.StartsWith("ERROR"))
+                    {
+                        _logger($"Failed to send Telegram message: {result}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger($"Exception sending Telegram message: {ex.Message}");
+                }
+            }
+        }
+
+        // INotificationService interface methods
+        public void LogEvent(string message)
+        {
+            if (_enableLog)
+            {
+                _logger(message);
+            }
+        }
+
+        public void SendTelegramNotification(string message)
+        {
+            if (_enableTelegram && !string.IsNullOrEmpty(_chatId) && !string.IsNullOrEmpty(_token))
+            {
+                try
+                {
+                    string result = _telegramService.SendTelegram(_chatId, _token, message);
                     if (result.StartsWith("ERROR"))
                     {
                         _logger($"Failed to send Telegram message: {result}");

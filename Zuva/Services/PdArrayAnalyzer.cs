@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using cAlgo.API;
 using Zuva.Extensions;
+using Zuva.Interfaces;
 using Zuva.Models;
 
 namespace Zuva.Services
@@ -11,7 +12,7 @@ namespace Zuva.Services
     /// Analyzes price action to identify and track order flow between swing points,
     /// and detects FVGs and Order Blocks
     /// </summary>
-    public class PdArrayAnalyzer
+    public class PdArrayAnalyzer : IPdArrayAnalyzer
     {
         // Add a delegate for logging
         private readonly Action<string> _logger;
@@ -65,13 +66,10 @@ namespace Zuva.Services
 
         // Time
         private readonly bool _macroFilter;
-        private readonly TimeManager _timeManager;
+        private readonly ITimeManager _timeManager;
 
         // Notifications
-        private readonly NotificationService _notificationService;
-
-        public delegate double PairDataProviderDelegate(string pairSymbol, DateTime time, int index,
-            Direction direction);
+        private readonly INotificationService _notificationService;
 
         public PairDataProviderDelegate PairDataProvider { get; set; }
 
@@ -79,7 +77,7 @@ namespace Zuva.Services
         private readonly List<Level> _gauntlets = new List<Level>();
 
         // Reference to swing point detector (moved from FvgDetector)
-        private readonly SwingPointDetector _swingPointDetector;
+        private readonly ISwingPointDetector _swingPointDetector;
 
         // Reference to bars for finding specific candles
         private Bars Bars;
@@ -102,12 +100,12 @@ namespace Zuva.Services
             bool showInsideKeyLevel = false,
             bool showRejectionBlock = false,
             int maxCisdsPerDirection = 2,
-            SwingPointDetector swingPointDetector = null,
+            ISwingPointDetector swingPointDetector = null,
             bool showSMT = false,
             string smtPair = "",
             bool macroFilter = false,
-            NotificationService notificationService = null,
-            TimeManager timeManager = null,
+            INotificationService notificationService = null,
+            ITimeManager timeManager = null,
             Action<string> logger = null)
         {
             _chart = chart;
